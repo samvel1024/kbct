@@ -61,6 +61,6 @@ B: PROP=21
 
 3. To execute the keymapper just run
 ```
-sudo ./keylaymap /dev/input/event11 config.json
+sudo ./keylaymap /dev/input/event11 laykeymap.json
 ```
 
