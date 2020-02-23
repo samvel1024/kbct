@@ -1,0 +1,1 @@
+add_library(poll Alarm.cpp Error.cpp KillReceiver.cpp Poll.cpp Subscriber.cpp)

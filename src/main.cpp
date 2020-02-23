@@ -2,6 +2,10 @@
 #include "KeyListener.h"
 #include "KeyMapper.h"
 #include "UInput.h"
+#include "poll/Poll.h"
+#include "poll/KillReceiver.h"
+#include "DeviceListener.h"
+#include "KeyboardGrabManager.h"
 
 int main(int argc, char **argv) {
 	if (argc != 3) {
@@ -10,12 +14,7 @@ int main(int argc, char **argv) {
 	}
 	std::string device = argv[1];
 	std::string json = argv[2];
-	UInput uinput;
-	KeyMapper mapper = KeyMapper::configure_from_json(json, [&uinput](auto p, auto l) {
-		uinput.consume(p, l);
-	});
-	KeyListener listener(device, [&mapper](auto &ev) {
-		mapper.on_keystroke(ev);
-	});
-	listener.listen_keystrokes();
+	KeyboardGrabManager manager(json);
+	manager.add_listener(device);
+	manager.listen();
 }
