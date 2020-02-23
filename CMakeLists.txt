@@ -8,5 +8,5 @@ add_subdirectory(json)
 
 add_compile_options("-g")
 
-add_executable(simkey simkey.cpp keyboard.c)
-target_link_libraries(simkey PRIVATE nlohmann_json::nlohmann_json)
+add_executable(laykeymap main.cpp keyboard.c)
+target_link_libraries(laykeymap PRIVATE nlohmann_json::nlohmann_json)
