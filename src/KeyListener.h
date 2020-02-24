@@ -5,7 +5,6 @@
 #include <utility>
 #include <vector>
 #include <fcntl.h>
-#include <zconf.h>
 #include <iostream>
 #include <linux/input.h>
 #include <csignal>

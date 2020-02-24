@@ -1,7 +1,3 @@
-//
-// Created by sme on 22/02/2020.
-//
-
 #ifndef KBPLUSPLUS_UINPUT_H
 #define KBPLUSPLUS_UINPUT_H
 

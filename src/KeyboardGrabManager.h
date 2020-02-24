@@ -11,7 +11,7 @@
 #include <type_traits>
 
 class KeyboardGrabManager {
-public:
+ public:
 	struct DeviceDescriptor {
 		std::string driver;
 		std::string name;
@@ -21,14 +21,14 @@ public:
 		}
 	};
 
-private:
+ private:
 	UInput uinput;
 	Poll poll;
 	std::unordered_map<std::string, KeyListener *> listeners;
 	KeyMapper mapper;
 	std::vector<std::string> keyboard_names;
 
-public:
+ public:
 
 	KeyboardGrabManager(KeymapConfig conf) : mapper(conf, [&](auto p, auto l) {
 		uinput.consume(p, l);
@@ -89,7 +89,9 @@ public:
 				}
 				char const *c_name = libevdev_get_name(dev);
 				std::string name = c_name == NULL ? "" : std::string(c_name);
-				devices.push_back({.driver = path, .name = name});
+				// Hacky way to avoid blocking the whole system
+				if (name.find("uinput") == std::string::npos)
+					devices.push_back({.driver = path, .name = name});
 
 				libevdev_free(dev);
 			}

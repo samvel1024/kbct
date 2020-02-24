@@ -1,7 +1,3 @@
-//
-// Created by sme on 23/02/2020.
-//
-
 #ifndef LAYKEYMAP_KEYMAPCONFIG_H
 #define LAYKEYMAP_KEYMAPCONFIG_H
 

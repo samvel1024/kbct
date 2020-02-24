@@ -6,19 +6,21 @@ This is simple keycode mapping utility. It performs the keycode mapping in low l
 
 If you have ever tried to have a universal ALT + IJKL or HJKL to arrow keys mapping, you have probably failed because the mapping got reset when changing input language or not all applications did understand the mapped arrow keys (like IntelliJ). Let alone the fact that it's almost impossible to compose mapped keys with other modifiers (like expecting LEFT_CTRL + ALT + I to be the same as LEFT_CTRL + UP)
 
-### Building and running
+### Installation
 
-To build the program from sources run 
+1. To install the program from sources run 
 ```
 git clone https://github.com/samvel1024/laykeymap && \
 cd laykeymap && \
-./build
+./scirpts/install.sh
 ```
 
-1. First configure your keymap following the examples below.
+2. Run `sudo laykeymap list` and figure out to which keyboard you want to apply the mapping. Copy the name of that keyboard (case, space sensitive).
+
+3. Configure your keymap at /etc/laykeymap following the example below.
 The identifiers are taken from the standard [linux keycode names](https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h). 
-Remember that layer modifiers are ignored completely.
-Place this in a file named laykeymap.json
+Remember that layer modifiers are ignored completely (as if they were not pressed). Paste the keyboad name in keyBoardNames array.
+
  ```
  {  
   "map": {  
@@ -44,23 +46,14 @@ Place this in a file named laykeymap.json
 	  "KEY_9": "KEY_VOLUMEDOWN",  
 	  "KEY_8": "KEY_MUTE"  
     }  
-  }  
+  },
+  "keyboardNames": ["AT Translated Set 2 keyboard"]
 }
 ```
-2. Find the keyboard char driver location. In other words run  `cat /proc/bus/input/devices`. From the list identify your keyboard. In my example I need to use  event11
+4. Test the mapping by `laykeymap grab /etc/laykeymap`. If you are happy with the resulting behavior enable the systemd service to run it automatically on login. Don't enable the service before testing as it might block all incoming keystrokes if not configured properly.
+  
 ```
-(sample content in /proc/bus/input/devices)
-I: Bus=0005 Vendor=17ef Product=6048 Version=0312
-N: Name="ThinkPad Compact Bluetooth Keyboard with TrackPoint"
-P: Phys=....
-S: Sysfs=....
-H: Handlers=sysrq rfkill kbd mouse4 event11 js0 leds 
-B: PROP=21
-... Not important
-``` 
-
-3. To execute the keymapper just run
-```
-sudo ./keylaymap /dev/input/event11 laykeymap.json
+sudo systemctl enable laykeymap
+sudo systemctl start laykeymap
 ```
 
