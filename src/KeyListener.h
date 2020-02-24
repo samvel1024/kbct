@@ -35,7 +35,8 @@ public:
 
 	KeyListener(std::string &device, std::function<void(void)> on_unsub,
 	            std::function<void(std::vector<struct input_event> &)> callback)
-			: Subscriber(device), callback(std::move(callback)), keyboard_fd(0), device(device), on_should_unsubscibe(std::move(on_unsub)) {
+			: Subscriber(device), callback(std::move(callback)), keyboard_fd(0), device(device),
+			  on_should_unsubscibe(std::move(on_unsub)) {
 		std::cout << "Iniitializing keyboard listener for " << device << std::endl;
 		if ((keyboard_fd = open(device.c_str(), O_RDONLY)) < 0) {
 			std::cout << errno << std::endl;
@@ -51,7 +52,7 @@ public:
 		}
 
 		set_fd(keyboard_fd);
-		set_expected(POLLIN | POLLERR);
+		set_expected(POLLIN | POLLERR | POLLHUP);
 	}
 
 	~KeyListener() override {
@@ -62,7 +63,7 @@ public:
 	}
 
 	void on_error(Poll &p, int event) override {
-		Subscriber::on_error(p, event);
+		on_should_unsubscibe();
 	}
 
 	void on_output(Poll &p) override {

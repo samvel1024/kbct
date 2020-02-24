@@ -1,5 +1,5 @@
-#ifndef DISTFS_NIOUTIL_H
-#define DISTFS_NIOUTIL_H
+#ifndef LIBPOLLNIOUTIL_H
+#define LIBPOLLNIOUTIL_H
 
 #include <vector>
 #include <memory>

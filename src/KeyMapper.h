@@ -2,10 +2,10 @@
 #define LAYKEYMAP_KEYMAPPER_H
 
 #include <unordered_map>
-#include <nlohmann/json.hpp>
 #include <fstream>
 #include <utility>
 #include "keyboard.h"
+#include "KeymapConfig.h"
 
 using json = nlohmann::json;
 
@@ -21,17 +21,12 @@ private:
 
 	static constexpr keycode_t IGNORED = 0;
 
-	struct config {
-		keynamemap_t map;
-		map_t<std::string, keynamemap_t> layers;
-	};
 
 	static map_t<std::string, keycode_t> get_key_to_code() {
 		map_t<std::string, keycode_t> codes{};
 		for (unsigned i = 0; i < LAYKEYMAP_MAX_KEYCODE; ++i) {
 			std::string val = laykeymap_key_name(i);
 			if (val != "?") {
-				std::cout << i << " " << val << std::endl;
 				codes[val] = i;
 			}
 		}
@@ -80,28 +75,8 @@ private:
 
 public:
 
-	static KeyMapper configure_from_json(std::string &json_file, consumer_t consumer) {
-		std::ifstream is(json_file, std::ifstream::in);
-		json json_conf = json::parse(is);
 
-		if (!json_conf.contains("map"))
-			json_conf["map"] = {};
-		if (!json_conf.contains("layers"))
-			json_conf["layers"] = {};
-
-		if (json_conf.size() > 2) {
-			std::cerr << "JSON has more than required keys (map, layers). See an example usage" << std::endl;
-			throw std::exception();
-		}
-
-		KeyMapper::config conf = KeyMapper::config{
-				json_conf["map"].get<map_t<std::string, std::string >>(),
-				json_conf["layers"].get<map_t<std::string, map_t<std::string, std::string >>>()
-		};
-		return KeyMapper(conf, std::move(consumer));
-	}
-
-	KeyMapper(KeyMapper::config &conf, consumer_t consumer) : mapped_event_consumer(std::move(consumer)) {
+	KeyMapper(KeymapConfig &conf, consumer_t consumer) : mapped_event_consumer(std::move(consumer)) {
 		map_t<std::string, keycode_t> available_keys = get_key_to_code();
 		assert_no_unknown_key(available_keys, conf.map);
 		for (auto const &v: conf.layers) {

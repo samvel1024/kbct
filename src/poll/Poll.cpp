@@ -9,8 +9,6 @@ const int DELETED = INT_MIN;
 const int COMPACTION_THRESHOLD = 3;
 
 Poll &Poll::subscribe(std::shared_ptr<Subscriber> sub) {
-	if (sub->get_fd() >= 0)
-		no_err(ioctl(sub->get_fd(), FIONBIO, (char *) &YES), "Setting to non blocking");
 	fds.push_back({.fd = sub->get_fd(), .events = sub->get_mask(), .revents = 0});
 	subs[sub->get_fd()] = sub;
 	return *this;
@@ -67,12 +65,9 @@ void Poll::loop() {
 			try {
 				if (fd.revents & POLLIN) {
 					listener->on_input(*this);
-				}
-				if (fd.revents & POLLOUT) {
+				} else if (fd.revents & POLLOUT) {
 					listener->on_output(*this);
-				}
-				if (fd.revents & !(POLLIN | POLLOUT)) {
-					std::cout << "Error event from poll " << fd.revents << std::endl;
+				} else {
 					listener->on_error(*this, fd.revents);
 				}
 			} catch (Error &e) {

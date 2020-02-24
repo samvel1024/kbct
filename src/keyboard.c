@@ -39,7 +39,7 @@
 #define LAYKEYMAP_KEYBOARD_H
 
 #if HAVE_CONFIG_H
-#include <config.h>
+#include <KeymapConfig.h>
 #endif
 
 #include <linux/input.h>

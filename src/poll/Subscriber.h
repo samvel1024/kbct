@@ -1,9 +1,5 @@
-//
-// Created by Samvel Abrahamyan on 2019-05-26.
-//
-
-#ifndef DISTFS_SUBSCRIBER_H
-#define DISTFS_SUBSCRIBER_H
+#ifndef LIBPOLLSUBSCRIBER_H
+#define LIBPOLLSUBSCRIBER_H
 
 #include "Poll.h"
 #include "Error.h"
@@ -47,4 +43,4 @@ public:
 	void set_dirty(bool dirty);
 };
 
-#endif //DISTFS_SUBSCRIBER_H
+#endif //LIBPOLLSUBSCRIBER_H

@@ -1,9 +1,5 @@
-//
-// Created by Samvel Abrahamyan on 2019-05-30.
-//
-
-#ifndef DISTFS_ALARM_H
-#define DISTFS_ALARM_H
+#ifndef LIBPOLLALARM_H
+#define LIBPOLLALARM_H
 
 #include "Subscriber.h"
 #include <functional>
@@ -33,4 +29,4 @@ public:
 
 };
 
-#endif //DISTFS_ALARM_H
+#endif //LIBPOLLALARM_H

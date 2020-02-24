@@ -22,5 +22,9 @@
       "KEY_9": "KEY_VOLUMEDOWN",
       "KEY_8": "KEY_MUTE"
     }
-  }
+  },
+  "keyboardNames": [
+    "AT Translated Set 2 keyboard",
+    "ThinkPad Compact Bluetooth Keyboard with TrackPoint"
+  ]
 }

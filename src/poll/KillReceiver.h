@@ -1,9 +1,5 @@
-//
-// Created by Samvel Abrahamyan on 2019-05-26.
-//
-
-#ifndef DISTFS_KILLRECEIVER_H
-#define DISTFS_KILLRECEIVER_H
+#ifndef LIBPOLLKILLRECEIVER_H
+#define LIBPOLLKILLRECEIVER_H
 #ifdef __linux__
 
 
@@ -37,4 +33,4 @@ class KillReceiver : public Subscriber {
 };
 
 #endif
-#endif //DISTFS_KILLRECEIVER_H
+#endif //LIBPOLLKILLRECEIVER_H

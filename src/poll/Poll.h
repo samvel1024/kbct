@@ -1,9 +1,5 @@
-//
-// Created by Samvel Abrahamyan on 2019-05-26.
-//
-
-#ifndef DISTFS_POLL_H
-#define DISTFS_POLL_H
+#ifndef LIBPOLLPOLL_H
+#define LIBPOLLPOLL_H
 
 #include "Subscriber.h"
 #include "Error.h"
@@ -41,4 +37,4 @@ public:
 	Poll();
 };
 
-#endif //DISTFS_POLL_H
+#endif //LIBPOLLPOLL_H
