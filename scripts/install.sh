@@ -2,13 +2,16 @@
 
 set -e
 
-sh ./scripts/build.sh
+################ DOWNLOAD EXECUTABLE ################
+wget https://github.com/samvel1024/laykeymap/releases/download/0.0.1/laykeymap
+chmod +x laykeymap
+echo "Installing laykeymap executable to /usr/bin"
+sudo mv laykeymap /usr/bin
 
 ################ SYSTEMD ############################
 SYSTEMD_CONF_PATH="/lib/systemd/system/laykeymap.service"
 echo "Installing systemd configuration file to ${SYSTEMD_CONF_PATH}"
 {
-  sudo rm ${SYSTEMD_CONF_PATH}
   sudo tee -a ${SYSTEMD_CONF_PATH} <<EOF
 [Unit]
 Description=Laykeymap keyboard mapper daemon
@@ -27,7 +30,6 @@ EOF
 KEYMAP_CONF_PATH="/etc/laykeymap"
 echo "Installing systemd configuration file to ${KEYMAP_CONF_PATH}"
 {
-  sudo rm ${KEYMAP_CONF_PATH}
   sudo tee -a ${KEYMAP_CONF_PATH} <<EOF
 {
   "map": {
@@ -48,11 +50,8 @@ echo "Installing systemd configuration file to ${KEYMAP_CONF_PATH}"
 EOF
 } >/dev/null
 
-################ EXECUTABLE #######################
 
-echo "Installing executable to /usr/bin"
-sudo cp build/src/laykeymap /usr/bin
-
+################# HELP ###################################
 echo
 echo "   Laykeymap installed succesfully!"
 echo "   Further steps:"

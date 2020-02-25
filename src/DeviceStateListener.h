@@ -12,10 +12,10 @@ class DeviceStateListener : public Subscriber {
 	std::function<void(void)> on_refresh_devices;
 	std::vector<char> buffer = std::vector<char>(1024 * sizeof(struct inotify_event));
 
-public:
+ public:
 
 	DeviceStateListener(std::function<void(void)> on_refresh)
-			: Subscriber(std::string("device-listener")), on_refresh_devices(std::move(on_refresh)) {
+		: Subscriber(std::string("device-listener")), on_refresh_devices(std::move(on_refresh)) {
 		int fd = inotify_init();
 		watched_dir = inotify_add_watch(fd, "/dev/input", IN_CREATE | IN_DELETE);
 		set_fd(fd);

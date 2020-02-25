@@ -8,11 +8,9 @@ If you have ever tried to have a universal ALT + IJKL or HJKL to arrow keys mapp
 
 ### Installation
 
-1. To install the program from sources run 
+1. To install the program run
 ```
-git clone https://github.com/samvel1024/laykeymap && \
-cd laykeymap && \
-./scirpts/install.sh
+wget https://raw.githubusercontent.com/samvel1024/laykeymap/master/scripts/install.sh && bash install.sh
 ```
 
 2. Run `sudo laykeymap list` and figure out to which keyboard you want to apply the mapping. Copy the name of that keyboard (case, space sensitive).
