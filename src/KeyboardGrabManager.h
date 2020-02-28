@@ -69,11 +69,23 @@ class KeyboardGrabManager {
 		namespace fs = std::filesystem;
 		std::vector<DeviceDescriptor> devices;
 
+		class fd_wrap {
+			int fd;
+		 public:
+			fd_wrap(int fd) : fd(fd) {}
+			operator int() {
+				return fd;
+			}
+			~fd_wrap() {
+				close(fd);
+			}
+		};
+
 		for (const auto &entry: fs::directory_iterator("/dev/input")) {
 			if (entry.is_character_file()) {
 				std::string path = fs::absolute(entry.path()).string();
 				struct libevdev *dev;
-				int fd = open(path.c_str(), O_RDWR);
+				fd_wrap fd(open(path.c_str(), O_RDWR));
 				if (fd < 0) {
 					std::cerr << "Could not open " << path << " ERROR " << std::strerror(errno) << std::endl;
 					continue;
