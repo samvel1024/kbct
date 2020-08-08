@@ -1,0 +1,30 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_size = 2
+indent_style = tab
+insert_final_newline = false
+max_line_length = 120
+tab_width = 2
+ij_continuation_indent_size = 8
+ij_formatter_off_tag = @formatter:off
+ij_formatter_on_tag = @formatter:on
+ij_formatter_tags_enabled = false
+ij_smart_tabs = false
+ij_wrap_on_typing = false
+
+[*.rs]
+max_line_length = 100
+ij_continuation_indent_size = 2
+ij_rust_align_multiline_chained_methods = false
+ij_rust_align_multiline_parameters = true
+ij_rust_align_multiline_parameters_in_calls = true
+ij_rust_block_comment_at_first_column = false
+ij_rust_keep_blank_lines_in_code = 2
+ij_rust_keep_blank_lines_in_declarations = 2
+ij_rust_keep_indents_on_empty_lines = false
+ij_rust_keep_line_breaks = true
+ij_rust_line_comment_add_space = true
+ij_rust_line_comment_at_first_column = false
