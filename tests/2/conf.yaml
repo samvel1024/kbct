@@ -1,0 +1,7 @@
+simple:
+  leftalt: rightalt
+
+complex:
+  - modifiers: ['rightalt']
+    keymap:
+      i: up

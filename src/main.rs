@@ -1,23 +1,23 @@
+#![allow(unused_imports)]
+#![allow(dead_code)]
+extern crate chrono;
 #[macro_use]
 extern crate log;
 extern crate pretty_env_logger;
 extern crate uinput;
 extern crate uinput_sys;
+#[macro_use]
+extern crate maplit;
 
-
-use std::{fs::File, io::{self}, process, thread, time};
-use std::borrow::BorrowMut;
+use std::{fs::File, io::{self}, process};
 use std::collections::HashMap;
 use std::env;
 use std::fs::OpenOptions;
-use std::io::{Error, Read};
+use std::io::{Error, ErrorKind, Read};
 use std::mem;
 use std::os::unix::io::AsRawFd;
-use std::rc::{Rc, Weak};
-use std::sync::Arc;
-use std::thread::sleep;
-use std::time::SystemTime;
 
+use inotify::Inotify;
 use ioctl_rs;
 use mio::{Events, Interest, Poll, Token};
 use mio::event::Event;
@@ -25,11 +25,8 @@ use mio::unix::SourceFd;
 use nix::sys::signal::SigSet;
 use nix::sys::signalfd::SignalFd;
 use uinput::Device;
-use uinput::event::keyboard::Key;
 use uinput_sys::*;
 use uinput_sys::input_event;
-
-use crate::ObserverResult::Terminate;
 
 struct EventLoop {
 	events: Events,
@@ -51,24 +48,29 @@ impl EventLoop {
 	fn run(&mut self) -> io::Result<()> {
 		while self.running {
 			self.poll.poll(&mut self.events, None)?;
-
 			for ev in self.events.iter() {
-				let now = SystemTime::now();
-
-
 				let handler = self.handlers.get_mut(&ev.token()).unwrap();
 				match handler.on_event(ev)? {
 					ObserverResult::Nothing => {}
 					ObserverResult::Unsubcribe => { unimplemented!() }
-					ObserverResult::Terminate { status } => {
+					ObserverResult::Terminate { status: _status } => {
 						self.running = false;
-						info!("Received signal, stopping");
 					}
-					ObserverResult::SubscribeNew(x) => { unimplemented!() }
+					ObserverResult::SubscribeNew(_x) => { unimplemented!() }
 				}
 			}
 		}
 		Ok(())
+	}
+
+	fn register_observer(&mut self, fd: i32, token: Token, obs: Box<dyn EventObserver>) -> io::Result<()> {
+		self.poll.registry().register(&mut SourceFd(&fd), token, Interest::READABLE)?;
+		if self.handlers.contains_key(&token) {
+			Err(Error::new(ErrorKind::AlreadyExists, "The handler token already registered"))
+		} else {
+			self.handlers.insert(token, obs);
+			Ok(())
+		}
 	}
 }
 
@@ -89,8 +91,7 @@ impl SignalReceiver {
 		const SIG_EVENT: Token = Token(1);
 		let sfd = nix::sys::signalfd::SignalFd::with_flags(
 			&mask, nix::sys::signalfd::SfdFlags::SFD_NONBLOCK).unwrap();
-		evloop.poll.registry().register(&mut SourceFd(&sfd.as_raw_fd()), SIG_EVENT, Interest::READABLE);
-		evloop.handlers.insert(SIG_EVENT, Box::new(SignalReceiver { signal_fd: (sfd) }));
+		evloop.register_observer(sfd.as_raw_fd(), SIG_EVENT, Box::new(SignalReceiver { signal_fd: (sfd) }))?;
 		trace!("Registered SIGTERM, SIGINT handlers");
 		Ok(())
 	}
@@ -98,7 +99,8 @@ impl SignalReceiver {
 
 impl EventObserver for SignalReceiver {
 	fn on_event(&mut self, _: &Event) -> io::Result<ObserverResult> {
-		Ok(Terminate {
+		info!("Received signal, stopping");
+		Ok(ObserverResult::Terminate {
 			status: 0
 		})
 	}
@@ -127,11 +129,11 @@ impl KeyboardMapper {
 			device: KeyboardMapper::open_uinput_device()?,
 			raw_buffer: [0; KeyboardMapper::BUF_SIZE],
 		});
-		kb_mapper.grab_keyboard();
+		kb_mapper.grab_keyboard()?;
 		const DEVICE_EVENT: Token = Token(0);
-		evloop.poll.registry().register(&mut SourceFd(&kb_mapper.file.as_raw_fd()), DEVICE_EVENT, Interest::READABLE)?;
-		evloop.handlers.insert(DEVICE_EVENT, kb_mapper);
-		Ok(())
+		evloop.register_observer(kb_mapper.file.as_raw_fd(),
+														 DEVICE_EVENT,
+														 kb_mapper)
 	}
 
 	fn open_uinput_device() -> io::Result<uinput::Device> {
@@ -250,9 +252,62 @@ impl EventObserver for KeyboardMapper {
 	}
 }
 
+struct DeviceWatcher {
+	inotify: Inotify
+}
+
+impl DeviceWatcher {
+	fn register(evloop: &mut EventLoop) -> io::Result<()> {
+		//Setup inotify poll reader
+		let mut watcher = DeviceWatcher {
+			inotify: inotify::Inotify::init()
+				.expect("Error while initializing inotify instance")
+		};
+		watcher.inotify
+			.add_watch(
+				"/dev/input",
+				inotify::WatchMask::CREATE | inotify::WatchMask::DELETE,
+			)
+			.expect("Failed to add file watch");
+		const SIG_INOTIFY: Token = Token(2);
+		evloop.register_observer(watcher.inotify.as_raw_fd(), SIG_INOTIFY, Box::new(watcher))?;
+		Ok(())
+	}
+}
+
+impl EventObserver for DeviceWatcher {
+	fn on_event(&mut self, _: &Event) -> io::Result<ObserverResult> {
+		let mut buffer = [0; 1024];
+		let events = self.inotify.read_events_blocking(&mut buffer)
+			.expect("Error while reading events");
+		for event in events {
+			if event.mask.contains(inotify::EventMask::CREATE) {
+				if event.mask.contains(inotify::EventMask::ISDIR) {
+					println!("Directory created: {:?}", event.name);
+				} else {
+					println!("File created: {:?}", event.name);
+				}
+			} else if event.mask.contains(inotify::EventMask::DELETE) {
+				if event.mask.contains(inotify::EventMask::ISDIR) {
+					println!("Directory deleted: {:?}", event.name);
+				} else {
+					println!("File deleted: {:?}", event.name);
+				}
+			} else if event.mask.contains(inotify::EventMask::MODIFY) {
+				if event.mask.contains(inotify::EventMask::ISDIR) {
+					println!("Directory modified: {:?}", event.name);
+				} else {
+					println!("File modified: {:?}", event.name);
+				}
+			}
+		}
+		Ok(ObserverResult::Nothing)
+	}
+}
+
 
 fn main() -> io::Result<()> {
-	pretty_env_logger::init();
+	pretty_env_logger::init_timed();
 	let program_args: Vec<String> = env::args().collect();
 
 
@@ -263,8 +318,9 @@ fn main() -> io::Result<()> {
 		handlers: HashMap::new(),
 	};
 
-	// SignalReceiver::register(&mut evloop)?;
+	SignalReceiver::register(&mut evloop)?;
 	KeyboardMapper::register(&mut evloop, program_args[1].clone())?;
+	DeviceWatcher::register(&mut evloop)?;
 
 	info!("Starting laykeymap event loop, pid={}", process::id());
 	evloop.run()?;

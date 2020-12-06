@@ -1,0 +1,4 @@
++rightalt -> +rightalt
++i -> -rightalt +up
+-rightalt ->
+-i -> -up
