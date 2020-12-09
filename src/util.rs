@@ -3,7 +3,6 @@
 
 
 mod keycodes;
-mod driver;
 mod nio;
 
 use std::{thread, time, io};
@@ -168,7 +167,7 @@ fn parse_test_case(line: &str, line_number: i32) -> TestCase {
 
 	// examples "+a -> ", "+a -> +b", "+a -> -b =c  "
 	let regex: Regex = Regex::new(
-		r"^([+-=][a-z_]+)\s*->\s*([+-=][a-z_]+(\s+[+-=][a-z_]+)*)*\s*$").unwrap();
+		r"^([+-=][0-9a-z_]+)\s*->\s*([+-=][0-9a-z_]+(\s+[+-=][0-9a-z_]+)*)*\s*$").unwrap();
 	assert!(regex.is_match(line), "Illegal test case on line {}", line_number);
 	let caps = regex.captures(line).unwrap();
 	let left = parse_key(caps.get(1).map(|x| x.as_str()).unwrap().trim());
@@ -258,8 +257,11 @@ fn replay(test_file: String, kbct_config_file: String) -> Result<()> {
 	let mut line_number = 1;
 	for line in lines {
 		if let Ok(line) = line {
+			if line.trim().is_empty() || line.trim().starts_with("#") {
+				line_number += 1;
+				continue;
+			}
 			let ev = parse_test_case(&line.as_str(), line_number);
-			line_number += 1;
 			let mapping = kbct.map_event(KbctEvent {
 				code: ev.source.keycode,
 				ev_type: match ev.source.statuscode {
@@ -293,6 +295,7 @@ fn replay(test_file: String, kbct_config_file: String) -> Result<()> {
 				}
 				_ => panic!("Received illegal value"),
 			}
+			line_number += 1;
 		}
 	}
 	send_wait_for_assert.send(Finish).unwrap();

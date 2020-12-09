@@ -1,0 +1,8 @@
+simple:
+  leftalt: leftctrl
+
+complex:
+  - modifiers: ['leftctrl']
+    keymap:
+      u: pagedown
+      o: pageup

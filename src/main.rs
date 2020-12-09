@@ -27,6 +27,10 @@ use nix::sys::signalfd::SignalFd;
 use uinput::Device;
 use uinput_sys::*;
 use uinput_sys::input_event;
+use kbct::{Kbct, KbctRootConf, KbctEvent};
+use std::sync::atomic::Ordering::Release;
+use uinput::event::keyboard::Function::Press;
+use kbct::KbctKeyStatus::*;
 
 struct EventLoop {
 	events: Events,
@@ -108,10 +112,9 @@ impl EventObserver for SignalReceiver {
 
 struct KeyboardMapper {
 	file: File,
-	current_layer: i32,
-	layers: [i32; 1024],
 	device: Device,
 	raw_buffer: [u8; KeyboardMapper::BUF_SIZE],
+	kbct: Kbct,
 }
 
 impl KeyboardMapper {
@@ -119,15 +122,25 @@ impl KeyboardMapper {
 	const BUF_SIZE: usize = mem::size_of::<input_event>() * KeyboardMapper::MAX_EVS;
 
 	fn register(evloop: &mut EventLoop, dev_file: String) -> io::Result<()> {
+		let kbct_conf_yaml = std::fs::read_to_string("./conf.yaml")
+			.expect("Could not open config yaml file");
+		let kbct_conf = KbctRootConf::parse(kbct_conf_yaml)
+			.expect("Could not parse yaml file");
+		let kbct = Kbct::new(
+			kbct_conf,
+			|x| match keycodes::name_to_code(format!("KEY_{}", x.to_uppercase()).as_str()) {
+				-1 => None,
+				x => Some(x)
+			}).expect("Could not create kbct instance");
+
 		let kb_mapper = Box::new(KeyboardMapper {
 			file: OpenOptions::new()
 				.read(true)
 				.write(false)
 				.open(dev_file)?,
-			current_layer: 0,
-			layers: [-1; 1024],
 			device: KeyboardMapper::open_uinput_device()?,
 			raw_buffer: [0; KeyboardMapper::BUF_SIZE],
+			kbct,
 		});
 		kb_mapper.grab_keyboard()?;
 		const DEVICE_EVENT: Token = Token(0);
@@ -160,92 +173,37 @@ impl KeyboardMapper {
 			_ => Err(Error::last_os_error()),
 		}
 	}
-
-	fn map(&mut self, ev: &mut input_event) {
-		let code = ev.code as usize;
-
-		if ev.value == 1 {
-			self.layers[code] = self.current_layer;
-		}
-		if self.layers[code] == -1 {
-			return;
-		}
-
-		ev.code = match (code as i32, self.layers[code]) {
-			(KEY_RIGHTCTRL, 0) => KEY_RIGHTMETA,
-			(KEY_LEFTALT, 0) => KEY_LEFTCTRL,
-			(KEY_CAPSLOCK, 0) => KEY_LEFTALT,
-			(KEY_LEFTCTRL, 0) => KEY_RIGHTALT,
-			(KEY_SYSRQ, 0) => KEY_RIGHTCTRL,
-
-			(KEY_L, 1) => KEY_RIGHT,
-			(KEY_I, 1) => KEY_UP,
-			(KEY_J, 1) => KEY_LEFT,
-			(KEY_K, 1) => KEY_DOWN,
-			(KEY_U, 1) => KEY_PAGEUP,
-			(KEY_O, 1) => KEY_PAGEDOWN,
-			(KEY_SEMICOLON, 1) => KEY_END,
-			(KEY_P, 1) => KEY_HOME,
-			(KEY_N, 1) => KEY_INSERT,
-			(KEY_COMMA, 1) => KEY_COMPOSE,
-
-			(KEY_1, 1) => KEY_F1,
-			(KEY_2, 1) => KEY_F2,
-			(KEY_3, 1) => KEY_F3,
-			(KEY_4, 1) => KEY_F4,
-			(KEY_5, 1) => KEY_F5,
-			(KEY_6, 1) => KEY_F6,
-			(KEY_7, 1) => KEY_F7,
-			(KEY_8, 1) => KEY_F8,
-			(KEY_9, 1) => KEY_F9,
-			(KEY_MINUS, 1) => KEY_F11,
-			(KEY_EQUAL, 1) => KEY_F12,
-			(KEY_HOME, 1) => KEY_BRIGHTNESSUP,
-			(KEY_F12, 1) => KEY_BRIGHTNESSDOWN,
-			(KEY_F11, 1) => KEY_VOLUMEUP,
-			(KEY_F10, 1) => KEY_VOLUMEDOWN,
-			(KEY_F9, 1) => KEY_MUTE,
-			(KEY_RIGHTSHIFT, 1) => KEY_CAPSLOCK,
-			(KEY_RIGHTBRACE, 1) => KEY_NEXTSONG,
-			(KEY_LEFTBRACE, 1) => KEY_PREVIOUSSONG,
-			(KEY_BACKSLASH, 1) => KEY_PLAYPAUSE,
-
-			(KEY_H, 1) => KEY_MENU,
-			(KEY_Y, 1) => KEY_PROG4,
-			(KEY_M, 1) => KEY_BACKSPACE,
-			(KEY_DOT, 1) => KEY_DELETE,
-			(KEY_LEFTALT, 1) => KEY_LEFTCTRL,
-			(KEY_CAPSLOCK, 1) => KEY_LEFTALT,
-			(KEY_LEFTCTRL, 1) => KEY_RIGHTALT,
-			(KEY_SYSRQ, 1) => KEY_RIGHTCTRL,
-			(left, _) => left,
-		} as u16;
-	}
 }
 
 impl EventObserver for KeyboardMapper {
 	fn on_event(&mut self, _: &Event) -> io::Result<ObserverResult> {
 		// trace!("vent")
 		let events_count = self.file.read(&mut self.raw_buffer)? / mem::size_of::<input_event>();
-		let mut events = unsafe {
+		let events = unsafe {
 			mem::transmute::<[u8; KeyboardMapper::BUF_SIZE], [input_event; KeyboardMapper::MAX_EVS]>(self.raw_buffer)
 		};
+
 		for i in 0..events_count {
-			let mut skip = false;
+			let x = events[i];
 			if events[i].kind == EV_KEY as u16 {
-				if events[i].code as i32 == KEY_RIGHTALT {
-					skip = true;
-					if events[i].value == 0 {
-						self.current_layer = 0;
-					} else {
-						self.current_layer = 1;
-					}
-				} else {
-					self.map(&mut events[i]);
+				let ev = match events[i].value {
+					0 => Released,
+					2 => Pressed,
+					1 => Clicked,
+					_ => panic!("Unknown event value")
+				};
+				let result = self.kbct.map_event(KbctEvent { code: events[i].code as i32, ev_type: ev });
+				for x in result {
+					println!("Mapped {:?}", x);
+					let value = match x.ev_type {
+						Released | ForceReleased => 0,
+						Pressed => 2,
+						Clicked => 1,
+					};
+					self.device.write(EV_KEY, x.code, value).unwrap();
 				}
-			}
-			if !skip {
-				self.device.write(events[i].kind as i32, events[i].code as i32, events[i].value).unwrap();
+			} else {
+				self.device.write(x.kind as i32, x.code as i32, x.value);
 			}
 		}
 		Ok(ObserverResult::Nothing)
@@ -308,9 +266,6 @@ impl EventObserver for DeviceWatcher {
 
 fn main() -> io::Result<()> {
 	pretty_env_logger::init_timed();
-	let program_args: Vec<String> = env::args().collect();
-
-
 	let mut evloop = EventLoop {
 		poll: Poll::new()?,
 		events: Events::with_capacity(1024),
@@ -319,11 +274,13 @@ fn main() -> io::Result<()> {
 	};
 
 	SignalReceiver::register(&mut evloop)?;
-	KeyboardMapper::register(&mut evloop, program_args[1].clone())?;
+	KeyboardMapper::register(&mut evloop, "/dev/input/event2".to_string())?;
 	DeviceWatcher::register(&mut evloop)?;
-
+	println!("Starting...");
 	info!("Starting laykeymap event loop, pid={}", process::id());
 	evloop.run()?;
 
 	Ok(())
 }
+
+mod keycodes;

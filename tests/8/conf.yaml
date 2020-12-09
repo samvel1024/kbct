@@ -1,0 +1,6 @@
+simple:
+  1: 2
+complex:
+  - modifiers: ['A']
+    keymap:
+      2: 3
