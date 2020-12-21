@@ -287,4 +287,4 @@ impl Kbct {
 
 
 #[cfg(test)]
-mod tests;
+mod test;

@@ -1,0 +1,7 @@
+complex:
+  - modifiers: ['space']
+    keymap:
+      i: up
+      j: left
+      k: down
+      l: right

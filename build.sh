@@ -41,7 +41,7 @@ function buildloop() {
 function do_integration_test() {
 	for dir in ./tests/*; do
 		echo "Running tests in $dir"
-		sudo test-util replay --testcase "$dir/test.txt" --config "$dir/conf.yaml" || test_fail
+		sudo kbct test-replay -t "$dir/test.txt" -c "$dir/conf.yaml" || test_fail
 	done
   test_passed
 

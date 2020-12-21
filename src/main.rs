@@ -16,6 +16,7 @@ use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind, Read};
 use std::mem;
 use std::os::unix::io::AsRawFd;
+use clap::Clap;
 
 use inotify::Inotify;
 use ioctl_rs;
@@ -27,67 +28,18 @@ use nix::sys::signalfd::SignalFd;
 use uinput::Device;
 use uinput_sys::*;
 use uinput_sys::input_event;
-use kbct::{Kbct, KbctRootConf, KbctEvent};
+use kbct::{Kbct, KbctRootConf, KbctEvent, Result, KbctError};
 use std::sync::atomic::Ordering::Release;
 use uinput::event::keyboard::Function::Press;
 use kbct::KbctKeyStatus::*;
-
-struct EventLoop {
-	events: Events,
-	poll: Poll,
-	running: bool,
-	handlers: HashMap<Token, Box<dyn EventObserver>>,
-}
-
-enum ObserverResult {
-	Nothing,
-	Unsubcribe,
-	Terminate {
-		status: i32
-	},
-	SubscribeNew(Box<dyn EventObserver>),
-}
-
-impl EventLoop {
-	fn run(&mut self) -> io::Result<()> {
-		while self.running {
-			self.poll.poll(&mut self.events, None)?;
-			for ev in self.events.iter() {
-				let handler = self.handlers.get_mut(&ev.token()).unwrap();
-				match handler.on_event(ev)? {
-					ObserverResult::Nothing => {}
-					ObserverResult::Unsubcribe => { unimplemented!() }
-					ObserverResult::Terminate { status: _status } => {
-						self.running = false;
-					}
-					ObserverResult::SubscribeNew(_x) => { unimplemented!() }
-				}
-			}
-		}
-		Ok(())
-	}
-
-	fn register_observer(&mut self, fd: i32, token: Token, obs: Box<dyn EventObserver>) -> io::Result<()> {
-		self.poll.registry().register(&mut SourceFd(&fd), token, Interest::READABLE)?;
-		if self.handlers.contains_key(&token) {
-			Err(Error::new(ErrorKind::AlreadyExists, "The handler token already registered"))
-		} else {
-			self.handlers.insert(token, obs);
-			Ok(())
-		}
-	}
-}
-
-trait EventObserver {
-	fn on_event(&mut self, _: &Event) -> io::Result<ObserverResult>;
-}
+use nio::*;
 
 struct SignalReceiver {
 	signal_fd: SignalFd,
 }
 
 impl SignalReceiver {
-	fn register(evloop: &mut EventLoop) -> io::Result<()> {
+	fn register(evloop: &mut EventLoop) -> Result<()> {
 		let mut mask = SigSet::empty();
 		mask.add(nix::sys::signal::SIGTERM);
 		mask.add(nix::sys::signal::SIGINT);
@@ -102,7 +54,7 @@ impl SignalReceiver {
 }
 
 impl EventObserver for SignalReceiver {
-	fn on_event(&mut self, _: &Event) -> io::Result<ObserverResult> {
+	fn on_event(&mut self, _: &Event) -> Result<ObserverResult> {
 		info!("Received signal, stopping");
 		Ok(ObserverResult::Terminate {
 			status: 0
@@ -121,62 +73,34 @@ impl KeyboardMapper {
 	const MAX_EVS: usize = 1024;
 	const BUF_SIZE: usize = mem::size_of::<input_event>() * KeyboardMapper::MAX_EVS;
 
-	fn register(evloop: &mut EventLoop, dev_file: String) -> io::Result<()> {
-		let kbct_conf_yaml = std::fs::read_to_string("./conf.yaml")
+	fn register(evloop: &mut EventLoop, dev_file: String, config_file: String) -> Result<()> {
+		let kbct_conf_yaml = std::fs::read_to_string(config_file.as_str())
 			.expect("Could not open config yaml file");
 		let kbct_conf = KbctRootConf::parse(kbct_conf_yaml)
 			.expect("Could not parse yaml file");
 		let kbct = Kbct::new(
 			kbct_conf,
-			|x| match keycodes::name_to_code(format!("KEY_{}", x.to_uppercase()).as_str()) {
+			|x| match util::keycodes::name_to_code(format!("KEY_{}", x.to_uppercase()).as_str()) {
 				-1 => None,
 				x => Some(x)
 			}).expect("Could not create kbct instance");
 
 		let kb_mapper = Box::new(KeyboardMapper {
-			file: OpenOptions::new()
-				.read(true)
-				.write(false)
-				.open(dev_file)?,
-			device: KeyboardMapper::open_uinput_device()?,
+			file: util::open_readable_uinput_device(&dev_file, true)?,
+			device: util::create_writable_uinput_device(&"KbctCustomisedDevice".to_string())?,
 			raw_buffer: [0; KeyboardMapper::BUF_SIZE],
 			kbct,
 		});
-		kb_mapper.grab_keyboard()?;
+
 		const DEVICE_EVENT: Token = Token(0);
 		evloop.register_observer(kb_mapper.file.as_raw_fd(),
 														 DEVICE_EVENT,
 														 kb_mapper)
 	}
-
-	fn open_uinput_device() -> io::Result<uinput::Device> {
-		let mut builder = uinput::default().unwrap()
-			.name("test").unwrap()
-			.event(uinput::event::Keyboard::All).unwrap()
-			.event(uinput::event::Controller::All).unwrap();
-
-		for item in uinput::event::relative::Position::iter_variants() {
-			builder = builder.event(item).unwrap();
-		}
-
-		for item in uinput::event::relative::Wheel::iter_variants() {
-			builder = builder.event(item).unwrap();
-		}
-		Ok(builder.create().unwrap())
-	}
-
-	fn grab_keyboard(&self) -> Result<(), Error> {
-		info!("Trying to grab device {:?}", self.file);
-		const EVIOCGRAB: u32 = 1074021776;
-		match unsafe { ioctl_rs::ioctl(self.file.as_raw_fd(), EVIOCGRAB, 1) } {
-			0 => Ok(()),
-			_ => Err(Error::last_os_error()),
-		}
-	}
 }
 
 impl EventObserver for KeyboardMapper {
-	fn on_event(&mut self, _: &Event) -> io::Result<ObserverResult> {
+	fn on_event(&mut self, _: &Event) -> Result<ObserverResult> {
 		// trace!("vent")
 		let events_count = self.file.read(&mut self.raw_buffer)? / mem::size_of::<input_event>();
 		let events = unsafe {
@@ -200,10 +124,10 @@ impl EventObserver for KeyboardMapper {
 						Pressed => 2,
 						Clicked => 1,
 					};
-					self.device.write(EV_KEY, x.code, value).unwrap();
+					self.device.write(EV_KEY, x.code, value)?;
 				}
 			} else {
-				self.device.write(x.kind as i32, x.code as i32, x.value);
+				self.device.write(x.kind as i32, x.code as i32, x.value)?;
 			}
 		}
 		Ok(ObserverResult::Nothing)
@@ -215,7 +139,7 @@ struct DeviceWatcher {
 }
 
 impl DeviceWatcher {
-	fn register(evloop: &mut EventLoop) -> io::Result<()> {
+	fn register(evloop: &mut EventLoop) -> Result<()> {
 		//Setup inotify poll reader
 		let mut watcher = DeviceWatcher {
 			inotify: inotify::Inotify::init()
@@ -234,7 +158,7 @@ impl DeviceWatcher {
 }
 
 impl EventObserver for DeviceWatcher {
-	fn on_event(&mut self, _: &Event) -> io::Result<ObserverResult> {
+	fn on_event(&mut self, _: &Event) -> Result<ObserverResult> {
 		let mut buffer = [0; 1024];
 		let events = self.inotify.read_events_blocking(&mut buffer)
 			.expect("Error while reading events");
@@ -263,24 +187,61 @@ impl EventObserver for DeviceWatcher {
 	}
 }
 
-
-fn main() -> io::Result<()> {
+fn start_mapper(config_file: String) -> Result<()> {
 	pretty_env_logger::init_timed();
-	let mut evloop = EventLoop {
-		poll: Poll::new()?,
-		events: Events::with_capacity(1024),
-		running: true,
-		handlers: HashMap::new(),
-	};
-
+	let mut evloop = EventLoop::new()?;
 	SignalReceiver::register(&mut evloop)?;
-	KeyboardMapper::register(&mut evloop, "/dev/input/event2".to_string())?;
+	KeyboardMapper::register(&mut evloop, "/dev/input/event2".to_string(), config_file)?;
 	DeviceWatcher::register(&mut evloop)?;
 	println!("Starting...");
-	info!("Starting laykeymap event loop, pid={}", process::id());
+	info!("Starting kbct event loop, pid={}", process::id());
 	evloop.run()?;
 
 	Ok(())
 }
 
-mod keycodes;
+
+#[derive(Clap)]
+struct CliRoot {
+	#[clap(subcommand)]
+	subcmd: SubCommand,
+}
+
+#[derive(Clap)]
+enum SubCommand {
+	#[clap()]
+	TestReplay(CliTestReplay),
+	#[clap()]
+	Remap(CliRemap),
+}
+
+#[derive(Clap)]
+struct CliTestReplay {
+	#[clap(short, long)]
+	testcase: String,
+	#[clap(short, long)]
+	config: String,
+}
+
+#[derive(Clap)]
+struct CliRemap {
+	#[clap(short, long)]
+	config: String,
+}
+
+fn main() -> Result<()> {
+	let root_opts: CliRoot = CliRoot::parse();
+	use SubCommand::*;
+	match root_opts.subcmd {
+		TestReplay(args) => {
+			util::replay(args.testcase, args.config)?;
+		}
+		Remap(args) => {
+			start_mapper(args.config)?;
+		}
+	}
+	Ok(())
+}
+
+mod nio;
+mod util;

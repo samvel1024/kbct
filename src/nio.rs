@@ -7,6 +7,8 @@ use kbct::{Result, KbctError};
 use mio::event::Event;
 use kbct::KbctError::IOError;
 
+const EVENTS_CAPACITY: usize = 1024;
+
 pub struct EventLoop {
 	events: Events,
 	poll: Poll,
@@ -24,7 +26,16 @@ pub enum ObserverResult {
 }
 
 impl EventLoop {
-	fn run(&mut self) -> Result<()> {
+	pub(crate) fn new() -> Result<EventLoop> {
+		Ok(EventLoop {
+			poll: Poll::new()?,
+			events: Events::with_capacity(EVENTS_CAPACITY),
+			running: true,
+			handlers: HashMap::new(),
+		})
+	}
+
+	pub(crate) fn run(&mut self) -> Result<()> {
 		while self.running {
 			self.poll.poll(&mut self.events, None)?;
 			for ev in self.events.iter() {

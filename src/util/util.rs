@@ -2,15 +2,11 @@
 #![allow(dead_code)]
 
 
-mod keycodes;
-mod nio;
-
 use std::{thread, time, io};
 
 use uinput::Device;
 use uinput::device::Builder;
 use uinput::event::keyboard;
-use clap::Clap;
 use kbct::{KbctEvent, KbctKeyStatus, Kbct, KbctError};
 use kbct::Result;
 use thiserror::Error;
@@ -26,57 +22,49 @@ use ioctl_rs::ioctl;
 use std::process::Command;
 use kbct::KbctError::IOError;
 use std::os::unix::io::{AsRawFd, RawFd};
-use crate::nio::{EventObserver, ObserverResult, EventLoop};
 use mio::event::Event;
 use std::path::Iter;
 use mio::{Token, Interest};
 use std::time::Duration;
 use core::{mem, fmt};
-use crate::keycodes::code_to_name;
+use crate::util::keycodes::{code_to_name, name_to_code};
 use std::sync::{Mutex, Arc};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use mio::unix::SourceFd;
-use crate::ReplayMessage::MappedResult;
 use regex::Regex;
 
-
-#[derive(Clap)]
-struct CliRoot {
-	#[clap(subcommand)]
-	subcmd: SubCommand,
-}
-
-#[derive(Clap)]
-enum SubCommand {
-	#[clap()]
-	Replay(CliReplay)
-}
-
-#[derive(Clap)]
-struct CliReplay {
-	#[clap(short, long)]
-	testcase: String,
-	#[clap(short, long)]
-	config: String,
-}
-
-
-fn grab_device_file(dev_file: &String) -> Result<File> {
-	let file = format!("/dev/input/{}", dev_file);
-
+pub fn open_readable_uinput_device(dev_file_path: &String, should_grab: bool) -> Result<File> {
 	let file = OpenOptions::new()
 		.read(true)
 		.write(false)
-		.open(&file)
-		.expect(format!("Could not open file {}", file).as_str());
+		.open(&dev_file_path)?;
 	const EVIOCGRAB: u32 = 1074021776;
-	match unsafe { ioctl_rs::ioctl(file.as_raw_fd(), EVIOCGRAB, 1) } {
-		0 => Ok(file),
-		_ => Err(IOError(Error::last_os_error())),
+	if should_grab {
+		match unsafe { ioctl_rs::ioctl(file.as_raw_fd(), EVIOCGRAB, 1) } {
+			0 => Ok(file),
+			_ => Err(KbctError::IOError(Error::last_os_error())),
+		}
+	} else {
+		Ok(file)
 	}
 }
 
-fn get_device_path(name: String) -> String {
+pub fn create_writable_uinput_device(name: &String) -> Result<Device> {
+	let mut builder = uinput::default()?
+		.name(&name)?
+		.event(uinput::event::Keyboard::All)?
+		.event(uinput::event::Controller::All)?;
+	for item in uinput::event::relative::Position::iter_variants() {
+		builder = builder.event(item)?;
+	}
+	for item in uinput::event::relative::Wheel::iter_variants() {
+		builder = builder.event(item)?;
+	}
+	let x = builder.create()?;
+	Ok(x)
+}
+
+pub fn find_input_device_by_name(name: &String) -> String {
 	let raw = Command::new("bash")
 		.arg("-c")
 		.arg(format!(
@@ -89,21 +77,6 @@ fn get_device_path(name: String) -> String {
 	String::from_utf8_lossy(&raw).to_string().trim().to_string()
 }
 
-fn open_uinput_device() -> Result<(Device, String)> {
-	let name = "KbctTest".to_string();
-	let mut builder = uinput::default()?
-		.name(&name)?
-		.event(uinput::event::Keyboard::All)?
-		.event(uinput::event::Controller::All)?;
-	for item in uinput::event::relative::Position::iter_variants() {
-		builder = builder.event(item)?;
-	}
-	for item in uinput::event::relative::Wheel::iter_variants() {
-		builder = builder.event(item)?;
-	}
-	let x = builder.create()?;
-	Ok((x, get_device_path(name)))
-}
 
 #[derive(PartialEq)]
 enum ReplayMessage {
@@ -127,7 +100,7 @@ struct TestCase {
 
 impl TestCase {
 	fn format_key_event(x: &KeyEvent) -> String {
-		let key = keycodes::code_to_name(x.keycode).to_string();
+		let key = code_to_name(x.keycode).to_string();
 		let status = match x.statuscode {
 			1 => "DOWN",
 			0 => "UP",
@@ -158,7 +131,7 @@ fn parse_test_case(line: &str, line_number: i32) -> TestCase {
 			'-' => 0,
 			_ => panic!("Illegal state")
 		};
-		let keycode = keycodes::name_to_code(format!("KEY_{}", &str[1..].to_uppercase()).as_str());
+		let keycode = name_to_code(format!("KEY_{}", &str[1..].to_uppercase()).as_str());
 		KeyEvent {
 			keycode,
 			statuscode,
@@ -226,12 +199,14 @@ fn read_keyboard_output(mut device_file: File, receiver: Receiver<ReplayMessage>
 }
 
 
-fn replay(test_file: String, kbct_config_file: String) -> Result<()> {
+pub fn replay(test_file: String, kbct_config_file: String) -> Result<()> {
 	use ReplayMessage::*;
 	use kbct::KbctKeyStatus::*;
 
-	let (mut device, device_name) = open_uinput_device()?;
-	let device_file = grab_device_file(&device_name)?;
+	let device_name = "DummyDevice".to_string();
+	let mut device = create_writable_uinput_device(&device_name)?;
+	let device_name = find_input_device_by_name(&device_name);
+	let device_file = open_readable_uinput_device(&format!("/dev/input/{}", device_name), true)?;
 
 	let lines = {
 		let file = File::open(test_file)?;
@@ -248,7 +223,7 @@ fn replay(test_file: String, kbct_config_file: String) -> Result<()> {
 			.expect("Could not open config yaml file");
 		let conf = kbct::KbctRootConf::parse(config)
 			.expect("Illegal config yaml file");
-		Kbct::new(conf, |x| match keycodes::name_to_code(format!("KEY_{}", x.to_uppercase()).as_str()) {
+		Kbct::new(conf, |x| match name_to_code(format!("KEY_{}", x.to_uppercase()).as_str()) {
 			-1 => None,
 			x => Some(x)
 		}).unwrap()
@@ -305,23 +280,13 @@ fn replay(test_file: String, kbct_config_file: String) -> Result<()> {
 	}
 }
 
-fn main() -> Result<()> {
-	let root_opts: CliRoot = CliRoot::parse();
-
-	match root_opts.subcmd {
-		SubCommand::Replay(r) => {
-			replay(r.testcase, r.config)?;
-		}
-	}
-	Ok(())
-}
 
 #[cfg(test)]
 mod tests {
 	#[test]
 	fn test_parse_test_case() {
 		fn t(s: &str) -> String {
-			format!("{}", crate::parse_test_case(s, 1))
+			format!("{}", crate::util::util::parse_test_case(s, 1))
 		}
 		assert_eq!(
 			"TestCase{from:(KEY_A, DOWN), to:[(KEY_B, DOWN)]}",
