@@ -33,12 +33,23 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use mio::unix::SourceFd;
 use regex::Regex;
 
+const EVIOCGRAB: u32 = 1074021776;
+const EVIOCGNAME_256: u32 = 2164278534;
+
+pub fn get_uinput_device_name(dev_file_path: &String) -> Result<Option<String>> {
+	let file = OpenOptions::new().read(true).write(false).open(&dev_file_path)?;
+	let buff = [0u8; 256];
+	match unsafe {
+		(ioctl_rs::ioctl(file.as_raw_fd(), EVIOCGNAME_256, &buff),
+		 Error::last_os_error().raw_os_error())
+	} {
+		(len, Some(0)) if len > 0 => Ok(Some(std::str::from_utf8(&buff[..(len - 1) as usize]).map(|x| x.to_string())?)),
+		_ => Err(KbctError::IOError(Error::last_os_error()))
+	}
+}
+
 pub fn open_readable_uinput_device(dev_file_path: &String, should_grab: bool) -> Result<File> {
-	let file = OpenOptions::new()
-		.read(true)
-		.write(false)
-		.open(&dev_file_path)?;
-	const EVIOCGRAB: u32 = 1074021776;
+	let file = OpenOptions::new().read(true).write(false).open(&dev_file_path)?;
 	if should_grab {
 		match unsafe { ioctl_rs::ioctl(file.as_raw_fd(), EVIOCGRAB, 1) } {
 			0 => Ok(file),

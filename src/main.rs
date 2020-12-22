@@ -9,7 +9,7 @@ extern crate uinput_sys;
 #[macro_use]
 extern crate maplit;
 
-use std::{fs::File, io::{self}, process};
+use std::{fs::File, io::{self}, process, fs};
 use std::collections::HashMap;
 use std::env;
 use std::fs::OpenOptions;
@@ -33,6 +33,7 @@ use std::sync::atomic::Ordering::Release;
 use uinput::event::keyboard::Function::Press;
 use kbct::KbctKeyStatus::*;
 use nio::*;
+use regex::Regex;
 
 struct SignalReceiver {
 	signal_fd: SignalFd,
@@ -200,6 +201,22 @@ fn start_mapper(config_file: String) -> Result<()> {
 	Ok(())
 }
 
+fn show_device_names() -> Result<()> {
+	let paths = fs::read_dir("/dev/input/")?;
+	let regex: Regex = Regex::new("^.*event\\d+$")?;
+
+	for path in paths {
+		let path_buf = path?.path();
+		let device_path = path_buf.to_string_lossy();
+		if regex.is_match(&device_path) {
+			if let Some(device_name) = util::get_uinput_device_name(&device_path.to_string())? {
+				println!("{} {:?}", device_path, device_name);
+			}
+		}
+	}
+	Ok(())
+}
+
 
 #[derive(Clap)]
 struct CliRoot {
@@ -213,6 +230,8 @@ enum SubCommand {
 	TestReplay(CliTestReplay),
 	#[clap()]
 	Remap(CliRemap),
+	#[clap()]
+	ListDevices(ListDevices),
 }
 
 #[derive(Clap)]
@@ -229,6 +248,9 @@ struct CliRemap {
 	config: String,
 }
 
+#[derive(Clap)]
+struct ListDevices {}
+
 fn main() -> Result<()> {
 	let root_opts: CliRoot = CliRoot::parse();
 	use SubCommand::*;
@@ -238,6 +260,9 @@ fn main() -> Result<()> {
 		}
 		Remap(args) => {
 			start_mapper(args.config)?;
+		}
+		ListDevices(_) => {
+			show_device_names()?;
 		}
 	}
 	Ok(())

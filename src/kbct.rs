@@ -12,6 +12,7 @@ use std::cmp::Ordering::Less;
 use thiserror::Error;
 use linked_hash_map::LinkedHashMap;
 use std::ptr::hash;
+use std::str::Utf8Error;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct KbctComplexConf {
@@ -43,6 +44,12 @@ pub enum KbctError {
 
 	#[error("IO Error {0}`")]
 	IOError(#[from] std::io::Error),
+
+	#[error("Utf8 Error")]
+	Utf8Error(#[from]std::str::Utf8Error),
+
+	#[error("Regex Error")]
+	RegexError(#[from]regex::Error),
 
 	#[error("Kbct Error")]
 	Error(String),
