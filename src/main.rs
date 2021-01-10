@@ -20,7 +20,7 @@ use clap::Clap;
 
 use inotify::Inotify;
 use ioctl_rs;
-use mio::event::Event;
+use mio::event::{Event, Source};
 use nix::sys::signal::SigSet;
 use nix::sys::signalfd::SignalFd;
 use uinput::Device;
@@ -33,9 +33,12 @@ use kbct::KbctKeyStatus::*;
 use nio::*;
 use regex::Regex;
 use crate::util::get_uinput_device_name;
+use mio::{event, Registry, Token, Interest};
+use mio::unix::SourceFd;
 
 struct SignalReceiver {
 	signal_fd: SignalFd,
+	raw_fd: RawFd,
 }
 
 impl SignalReceiver {
@@ -46,9 +49,11 @@ impl SignalReceiver {
 		mask.thread_block().unwrap();
 		let sfd = nix::sys::signalfd::SignalFd::with_flags(
 			&mask, nix::sys::signalfd::SfdFlags::SFD_NONBLOCK).unwrap();
-		Ok(Box::new(SignalReceiver { signal_fd: (sfd) }))
+		let fd = sfd.as_raw_fd();
+		Ok(Box::new(SignalReceiver { signal_fd: (sfd), raw_fd: fd }))
 	}
 }
+
 
 impl EventObserver for SignalReceiver {
 	fn on_event(&mut self, _: &Event) -> Result<ObserverResult> {
@@ -58,8 +63,8 @@ impl EventObserver for SignalReceiver {
 		})
 	}
 
-	fn get_fd(&self) -> Result<RawFd> {
-		Ok(self.signal_fd.as_raw_fd())
+	fn get_source_fd(&self) -> SourceFd {
+		SourceFd(&self.raw_fd)
 	}
 }
 
@@ -68,6 +73,7 @@ struct KeyboardMapper {
 	device: Device,
 	raw_buffer: [u8; KeyboardMapper::BUF_SIZE],
 	kbct: Kbct,
+	raw_fd: RawFd,
 }
 
 impl KeyboardMapper {
@@ -79,6 +85,7 @@ impl KeyboardMapper {
 			.expect("Could not open config yaml file");
 		let kbct_conf = KbctConf::parse(kbct_conf_yaml)
 			.expect("Could not parse yaml file");
+
 		let kbct = Kbct::new(
 			kbct_conf,
 			|x| match util::keycodes::name_to_code(format!("KEY_{}", x.to_uppercase()).as_str()) {
@@ -86,11 +93,17 @@ impl KeyboardMapper {
 				x => Some(x)
 			}).expect("Could not create kbct instance");
 
+		let file = util::open_readable_uinput_device(&dev_file, true)?;
+		let raw_fd = file.as_raw_fd();
+		let device = util::create_writable_uinput_device(&"KbctCustomisedDevice".to_string())?;
+		let raw_buffer = [0; KeyboardMapper::BUF_SIZE];
+
 		let kb_mapper = Box::new(KeyboardMapper {
-			file: util::open_readable_uinput_device(&dev_file, true)?,
-			device: util::create_writable_uinput_device(&"KbctCustomisedDevice".to_string())?,
-			raw_buffer: [0; KeyboardMapper::BUF_SIZE],
+			file,
+			device,
+			raw_buffer,
 			kbct,
+			raw_fd,
 		});
 		Ok(kb_mapper)
 	}
@@ -129,8 +142,8 @@ impl EventObserver for KeyboardMapper {
 		Ok(ObserverResult::Nothing)
 	}
 
-	fn get_fd(&self) -> Result<RawFd> {
-		Ok(self.file.as_raw_fd())
+	fn get_source_fd(&self) -> SourceFd {
+		SourceFd(&self.raw_fd)
 	}
 }
 
@@ -138,24 +151,25 @@ struct DeviceManager {
 	inotify: Inotify,
 	conf: KbctRootConf,
 	captured_kb_paths: HashSet<String>,
+	raw_fd: RawFd,
 }
 
 impl DeviceManager {
 	pub const SYNTHETIC_EV_FILE: &'static str = "__kbct_synthetic_event";
 
 	fn new(conf: KbctRootConf) -> Result<Box<DeviceManager>> {
-		let mut watcher = DeviceManager {
-			inotify: inotify::Inotify::init()
-				.expect("Error while initializing inotify instance"),
-			conf,
-			captured_kb_paths: hashset! {},
-		};
-		watcher.inotify
+		let mut inotify = inotify::Inotify::init()
+			.expect("Error while initializing inotify instance");
+		let raw_fd = inotify.as_raw_fd();
+		let captured_kb_paths = hashset! {};
+
+		inotify
 			.add_watch(
 				"/dev/input",
 				inotify::WatchMask::CREATE | inotify::WatchMask::DELETE,
 			).expect("Failed to add file watch on /dev/input/*");
-		Ok(Box::new(watcher))
+
+		Ok(Box::new(DeviceManager { inotify, conf, raw_fd, captured_kb_paths }))
 	}
 
 	fn force_try_capture_device() {
@@ -189,13 +203,14 @@ impl DeviceManager {
 			let kb_new_name = format!("{}-{}", "Kbct", kb_name);
 
 			if !self.is_captured_by_path(kb_path) {
-				println!("Capturing device {}", kb_new_name);
-				let mapper = Box::new(KeyboardMapper {
-					file: util::open_readable_uinput_device(kb_path, true)?,
-					device: util::create_writable_uinput_device(&kb_new_name)?,
-					raw_buffer: [0; KeyboardMapper::BUF_SIZE],
-					kbct: Kbct::new(conf.clone(), util::linux_keyname_mapper)?,
-				});
+				let file = util::open_readable_uinput_device(kb_path, true)?;
+				let raw_fd = file.as_raw_fd();
+				let device = util::create_writable_uinput_device(&kb_new_name)?;
+				let raw_buffer = [0; KeyboardMapper::BUF_SIZE];
+				let kbct = Kbct::new(conf.clone(), util::linux_keyname_mapper)?;
+
+				let mapper = Box::new(
+					KeyboardMapper { file, device, raw_buffer, kbct, raw_fd });
 
 				ans.push(mapper);
 				self.captured_kb_paths.insert(kb_path.clone());
@@ -233,8 +248,8 @@ impl EventObserver for DeviceManager {
 		}
 	}
 
-	fn get_fd(&self) -> Result<RawFd> {
-		Ok(self.inotify.as_raw_fd())
+	fn get_source_fd(&self) -> SourceFd {
+		SourceFd(&self.raw_fd)
 	}
 }
 

@@ -72,10 +72,10 @@ impl EventLoop {
 
 
 	fn do_register_observer(reg: &mut EventLoopRegistrar, obs: Box<dyn EventObserver>) -> Result<()> {
-		let fd = obs.get_fd()?;
+		let mut fd = obs.get_source_fd();
 		let token = Token(reg.last_token);
 		reg.last_token += 1;
-		reg.poll.registry().register(&mut SourceFd(&fd), token, Interest::READABLE)?;
+		reg.poll.registry().register(&mut fd, token, Interest::READABLE)?;
 		assert!(reg.handlers.get(&token).is_none(), "Token handler is already set");
 		reg.handlers.insert(token, obs);
 		Ok(())
@@ -84,5 +84,5 @@ impl EventLoop {
 
 pub trait EventObserver {
 	fn on_event(&mut self, _: &Event) -> Result<ObserverResult>;
-	fn get_fd(&self) -> Result<RawFd>;
+	fn get_source_fd(&self) -> SourceFd;
 }
