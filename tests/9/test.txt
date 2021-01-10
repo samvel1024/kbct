@@ -1,0 +1,5 @@
++space -> +space
++i -> -space +up
++t -> +space +t
+-t -> -t
+-space -> -space

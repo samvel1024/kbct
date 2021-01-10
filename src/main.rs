@@ -15,14 +15,12 @@ use std::env;
 use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind, Read};
 use std::mem;
-use std::os::unix::io::AsRawFd;
+use std::os::unix::io::{AsRawFd, RawFd};
 use clap::Clap;
 
 use inotify::Inotify;
 use ioctl_rs;
-use mio::{Events, Interest, Poll, Token};
 use mio::event::Event;
-use mio::unix::SourceFd;
 use nix::sys::signal::SigSet;
 use nix::sys::signalfd::SignalFd;
 use uinput::Device;
@@ -41,17 +39,14 @@ struct SignalReceiver {
 }
 
 impl SignalReceiver {
-	fn register(evloop: &mut EventLoop) -> Result<()> {
+	fn new() -> Result<Box<SignalReceiver>> {
 		let mut mask = SigSet::empty();
 		mask.add(nix::sys::signal::SIGTERM);
 		mask.add(nix::sys::signal::SIGINT);
 		mask.thread_block().unwrap();
-		const SIG_EVENT: Token = Token(1);
 		let sfd = nix::sys::signalfd::SignalFd::with_flags(
 			&mask, nix::sys::signalfd::SfdFlags::SFD_NONBLOCK).unwrap();
-		evloop.register_observer(sfd.as_raw_fd(), SIG_EVENT, Box::new(SignalReceiver { signal_fd: (sfd) }))?;
-		trace!("Registered SIGTERM, SIGINT handlers");
-		Ok(())
+		Ok(Box::new(SignalReceiver { signal_fd: (sfd) }))
 	}
 }
 
@@ -61,6 +56,10 @@ impl EventObserver for SignalReceiver {
 		Ok(ObserverResult::Terminate {
 			status: 0
 		})
+	}
+
+	fn get_fd(&self) -> Result<RawFd> {
+		Ok(self.signal_fd.as_raw_fd())
 	}
 }
 
@@ -75,7 +74,7 @@ impl KeyboardMapper {
 	const MAX_EVS: usize = 1024;
 	const BUF_SIZE: usize = mem::size_of::<input_event>() * KeyboardMapper::MAX_EVS;
 
-	fn register(evloop: &mut EventLoop, dev_file: String, config_file: String) -> Result<()> {
+	fn new(dev_file: String, config_file: String) -> Result<Box<KeyboardMapper>> {
 		let kbct_conf_yaml = std::fs::read_to_string(config_file.as_str())
 			.expect("Could not open config yaml file");
 		let kbct_conf = KbctConf::parse(kbct_conf_yaml)
@@ -93,11 +92,7 @@ impl KeyboardMapper {
 			raw_buffer: [0; KeyboardMapper::BUF_SIZE],
 			kbct,
 		});
-
-		const DEVICE_EVENT: Token = Token(0);
-		evloop.register_observer(kb_mapper.file.as_raw_fd(),
-														 DEVICE_EVENT,
-														 kb_mapper)
+		Ok(kb_mapper)
 	}
 }
 
@@ -120,7 +115,6 @@ impl EventObserver for KeyboardMapper {
 				};
 				let result = self.kbct.map_event(KbctEvent { code: events[i].code as i32, ev_type: ev });
 				for x in result {
-					println!("Mapped {:?}", x);
 					let value = match x.ev_type {
 						Released | ForceReleased => 0,
 						Pressed => 2,
@@ -134,6 +128,10 @@ impl EventObserver for KeyboardMapper {
 		}
 		Ok(ObserverResult::Nothing)
 	}
+
+	fn get_fd(&self) -> Result<RawFd> {
+		Ok(self.file.as_raw_fd())
+	}
 }
 
 struct DeviceManager {
@@ -144,6 +142,21 @@ struct DeviceManager {
 
 impl DeviceManager {
 	pub const SYNTHETIC_EV_FILE: &'static str = "__kbct_synthetic_event";
+
+	fn new(conf: KbctRootConf) -> Result<Box<DeviceManager>> {
+		let mut watcher = DeviceManager {
+			inotify: inotify::Inotify::init()
+				.expect("Error while initializing inotify instance"),
+			conf,
+			captured_kb_paths: hashset! {},
+		};
+		watcher.inotify
+			.add_watch(
+				"/dev/input",
+				inotify::WatchMask::CREATE | inotify::WatchMask::DELETE,
+			).expect("Failed to add file watch on /dev/input/*");
+		Ok(Box::new(watcher))
+	}
 
 	fn force_try_capture_device() {
 		thread::spawn(move || {
@@ -164,23 +177,6 @@ impl DeviceManager {
 		self.captured_kb_paths.insert(device.clone());
 	}
 
-	fn register(evloop: &mut EventLoop, conf: KbctRootConf) -> Result<()> {
-		//Setup inotify poll reader
-		let mut watcher = DeviceManager {
-			inotify: inotify::Inotify::init()
-				.expect("Error while initializing inotify instance"),
-			conf,
-			captured_kb_paths: hashset! {},
-		};
-		watcher.inotify
-			.add_watch(
-				"/dev/input",
-				inotify::WatchMask::CREATE | inotify::WatchMask::DELETE,
-			).expect("Failed to add file watch on /dev/input/*");
-		const SIG_INOTIFY: Token = Token(2);
-		evloop.register_observer(watcher.inotify.as_raw_fd(), SIG_INOTIFY, Box::new(watcher))?;
-		Ok(())
-	}
 
 	fn update_captured_kbs(&mut self) -> Result<Vec<Box<dyn EventObserver>>> {
 		let available_devices = util::get_all_uinput_device_paths()?;
@@ -222,11 +218,11 @@ impl EventObserver for DeviceManager {
 
 		let has_updates =
 			events.into_iter()
-			.find(|event| regex.is_match(event.name.unwrap().to_str().unwrap()) &&
-				!event.mask.contains(EventMask::ISDIR) &&
-				(event.mask.contains(EventMask::CREATE) ||
-					event.mask.contains(EventMask::DELETE)))
-			.is_some();
+				.find(|event| regex.is_match(event.name.unwrap().to_str().unwrap()) &&
+					!event.mask.contains(EventMask::ISDIR) &&
+					(event.mask.contains(EventMask::CREATE) ||
+						event.mask.contains(EventMask::DELETE)))
+				.is_some();
 
 		if has_updates {
 			Ok(ObserverResult::SubscribeNew(
@@ -235,6 +231,10 @@ impl EventObserver for DeviceManager {
 		} else {
 			Ok(ObserverResult::Nothing)
 		}
+	}
+
+	fn get_fd(&self) -> Result<RawFd> {
+		Ok(self.inotify.as_raw_fd())
 	}
 }
 
@@ -256,8 +256,9 @@ fn start_mapper(config_file: String) -> Result<()> {
 
 	let mut evloop = EventLoop::new()?;
 
-	SignalReceiver::register(&mut evloop)?;
-	DeviceManager::register(&mut evloop, config)?;
+	evloop.register_observer(SignalReceiver::new()?)?;
+	evloop.register_observer(DeviceManager::new(config)?)?;
+
 	DeviceManager::force_try_capture_device();
 
 	info!("Starting kbct event loop, pid={}", process::id());
