@@ -196,25 +196,26 @@ impl DeviceManager {
 		let mut ans: Vec<Box<dyn EventObserver>> = vec![];
 
 		for (kb_alias, conf) in self.conf.modifications.iter() {
-			let kb_name = self.conf.keyboards.get(kb_alias).unwrap();
-			let kb_path = available_devices.get(kb_name).unwrap();
-			let kb_new_name = format!("{}-{}", "Kbct", kb_name);
+			if let Some(kb_name) = self.conf.keyboards.get(kb_alias) {
+				if let Some(kb_path) = available_devices.get(kb_name) {
+					if !self.is_captured_by_path(kb_path) {
+						let kb_new_name = format!("{}-{}", "Kbct", kb_name);
+						let file = util::open_readable_uinput_device(kb_path, true)?;
+						let raw_fd = file.as_raw_fd();
+						let device = util::create_writable_uinput_device(&kb_new_name)?;
+						let raw_buffer = [0; KeyboardMapper::BUF_SIZE];
+						let kbct = Kbct::new(conf.clone(), util::linux_keyname_mapper)?;
 
-			if !self.is_captured_by_path(kb_path) {
-				let file = util::open_readable_uinput_device(kb_path, true)?;
-				let raw_fd = file.as_raw_fd();
-				let device = util::create_writable_uinput_device(&kb_new_name)?;
-				let raw_buffer = [0; KeyboardMapper::BUF_SIZE];
-				let kbct = Kbct::new(conf.clone(), util::linux_keyname_mapper)?;
+						let mapper = Box::new(
+							KeyboardMapper { file, device, raw_buffer, kbct, raw_fd });
 
-				let mapper = Box::new(
-					KeyboardMapper { file, device, raw_buffer, kbct, raw_fd });
+						ans.push(mapper);
+						self.captured_kb_paths.insert(kb_path.clone());
 
-				ans.push(mapper);
-				self.captured_kb_paths.insert(kb_path.clone());
-
-				info!("Capturing device path={} name={:?} mapped_name={:?}",
-							kb_path, kb_name, kb_new_name)
+						info!("Capturing device path={} name={:?} mapped_name={:?}",
+									kb_path, kb_name, kb_new_name)
+					}
+				}
 			}
 		}
 		Ok(ans)
@@ -256,16 +257,10 @@ fn start_mapper(config_file: String) -> Result<()> {
 	// TODO timed
 	pretty_env_logger::init();
 
-	let config = KbctConf::parse(
+	let config = KbctRootConf::parse(
 		std::fs::read_to_string(config_file.as_str())
 			.expect(&format!("Could not open file {}", config_file))
 	).expect("Could not parse the configuration yaml file");
-
-	// TODO REMOVE
-	let config = kbct::KbctRootConf {
-		keyboards: hashmap! {"main".to_string() => "AT Translated Set 2 keyboard".to_string()},
-		modifications: hashmap! {"main".to_string() => config},
-	};
 
 	let mut evloop = EventLoop::new()?;
 
