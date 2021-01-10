@@ -22,7 +22,7 @@ pub enum ObserverResult {
 	Terminate {
 		status: i32
 	},
-	SubscribeNew(Box<dyn EventObserver>),
+	SubscribeNew(Vec<Box<dyn EventObserver>>),
 }
 
 impl EventLoop {
@@ -46,7 +46,10 @@ impl EventLoop {
 					ObserverResult::Terminate { status: _status } => {
 						self.running = false;
 					}
-					ObserverResult::SubscribeNew(_x) => { unimplemented!() }
+					ObserverResult::SubscribeNew(observers) => {
+						for obs in observers {
+						}
+					}
 				}
 			}
 		}
@@ -58,6 +61,7 @@ impl EventLoop {
 		if self.handlers.contains_key(&token) {
 			Err(KbctError::Error("Already exists".to_string()))
 		} else {
+			assert!(self.handlers.get(&token).is_none(), "Token handler is already set");
 			self.handlers.insert(token, obs);
 			Ok(())
 		}

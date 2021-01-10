@@ -14,7 +14,7 @@ use linked_hash_map::LinkedHashMap;
 use std::ptr::hash;
 use std::str::Utf8Error;
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 struct KbctComplexConf {
 	modifiers: Vec<String>,
 	keymap: HashMap<String, String>,
@@ -55,16 +55,27 @@ pub enum KbctError {
 	Error(String),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct KbctRootConf {
+	pub keyboards: HashMap<String, String>,
+	pub modifications: HashMap<String, KbctConf>
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct KbctConf {
 	simple: Option<HashMap<String, String>>,
 	complex: Option<Vec<KbctComplexConf>>,
 }
 
+impl KbctConf {
+	pub fn parse(str: String) -> Result<KbctConf> {
+		Ok(serde_yaml::from_str(&str)?)
+	}
+}
+
 impl KbctRootConf {
 	pub fn parse(str: String) -> Result<KbctRootConf> {
-		let yml = serde_yaml::from_str(&str)?;
-		Ok(yml)
+		Ok(serde_yaml::from_str(&str)?)
 	}
 }
 
@@ -102,7 +113,7 @@ pub enum KbctKeyStatus {
 
 
 impl Kbct {
-	pub fn new(conf: KbctRootConf, key_code: impl Fn(&String) -> Option<i32>) -> Result<Kbct> {
+	pub fn new(conf: KbctConf, key_code: impl Fn(&String) -> Option<i32>) -> Result<Kbct> {
 		let simple = conf.simple.unwrap_or_default();
 		let complex = conf.complex.unwrap_or_default();
 

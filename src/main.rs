@@ -9,8 +9,8 @@ extern crate uinput_sys;
 #[macro_use]
 extern crate maplit;
 
-use std::{fs::File, io::{self}, process, fs};
-use std::collections::HashMap;
+use std::{fs::File, io::{self}, process, fs, thread, time};
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind, Read};
@@ -28,12 +28,13 @@ use nix::sys::signalfd::SignalFd;
 use uinput::Device;
 use uinput_sys::*;
 use uinput_sys::input_event;
-use kbct::{Kbct, KbctRootConf, KbctEvent, Result, KbctError};
+use kbct::*;
 use std::sync::atomic::Ordering::Release;
 use uinput::event::keyboard::Function::Press;
 use kbct::KbctKeyStatus::*;
 use nio::*;
 use regex::Regex;
+use crate::util::get_uinput_device_name;
 
 struct SignalReceiver {
 	signal_fd: SignalFd,
@@ -77,7 +78,7 @@ impl KeyboardMapper {
 	fn register(evloop: &mut EventLoop, dev_file: String, config_file: String) -> Result<()> {
 		let kbct_conf_yaml = std::fs::read_to_string(config_file.as_str())
 			.expect("Could not open config yaml file");
-		let kbct_conf = KbctRootConf::parse(kbct_conf_yaml)
+		let kbct_conf = KbctConf::parse(kbct_conf_yaml)
 			.expect("Could not parse yaml file");
 		let kbct = Kbct::new(
 			kbct_conf,
@@ -135,66 +136,130 @@ impl EventObserver for KeyboardMapper {
 	}
 }
 
-struct DeviceWatcher {
-	inotify: Inotify
+struct DeviceManager {
+	inotify: Inotify,
+	conf: KbctRootConf,
+	captured_kb_paths: HashSet<String>,
 }
 
-impl DeviceWatcher {
-	fn register(evloop: &mut EventLoop) -> Result<()> {
+impl DeviceManager {
+	pub const SYNTHETIC_EV_FILE: &'static str = "__kbct_synthetic_event";
+
+	fn force_try_capture_device() {
+		thread::spawn(move || {
+			thread::sleep(time::Duration::from_millis(100));
+			let path = format!("/dev/input/{}", DeviceManager::SYNTHETIC_EV_FILE);
+			File::create(&path).unwrap();
+			fs::remove_file(&path).unwrap();
+		});
+	}
+
+	fn is_captured_by_path(&self, device: &String) -> bool {
+		println!("{:?} {}", self.captured_kb_paths, device);
+		self.captured_kb_paths.contains(device)
+	}
+
+	fn mark_captured(&mut self, device: &String) {
+		println!("{:?}", self.captured_kb_paths);
+		self.captured_kb_paths.insert(device.clone());
+	}
+
+	fn register(evloop: &mut EventLoop, conf: KbctRootConf) -> Result<()> {
 		//Setup inotify poll reader
-		let mut watcher = DeviceWatcher {
+		let mut watcher = DeviceManager {
 			inotify: inotify::Inotify::init()
-				.expect("Error while initializing inotify instance")
+				.expect("Error while initializing inotify instance"),
+			conf,
+			captured_kb_paths: hashset! {},
 		};
 		watcher.inotify
 			.add_watch(
 				"/dev/input",
 				inotify::WatchMask::CREATE | inotify::WatchMask::DELETE,
-			)
-			.expect("Failed to add file watch");
+			).expect("Failed to add file watch on /dev/input/*");
 		const SIG_INOTIFY: Token = Token(2);
 		evloop.register_observer(watcher.inotify.as_raw_fd(), SIG_INOTIFY, Box::new(watcher))?;
 		Ok(())
 	}
-}
 
-impl EventObserver for DeviceWatcher {
-	fn on_event(&mut self, _: &Event) -> Result<ObserverResult> {
-		let mut buffer = [0; 1024];
-		let events = self.inotify.read_events_blocking(&mut buffer)
-			.expect("Error while reading events");
-		for event in events {
-			if event.mask.contains(inotify::EventMask::CREATE) {
-				if event.mask.contains(inotify::EventMask::ISDIR) {
-					println!("Directory created: {:?}", event.name);
-				} else {
-					println!("File created: {:?}", event.name);
-				}
-			} else if event.mask.contains(inotify::EventMask::DELETE) {
-				if event.mask.contains(inotify::EventMask::ISDIR) {
-					println!("Directory deleted: {:?}", event.name);
-				} else {
-					println!("File deleted: {:?}", event.name);
-				}
-			} else if event.mask.contains(inotify::EventMask::MODIFY) {
-				if event.mask.contains(inotify::EventMask::ISDIR) {
-					println!("Directory modified: {:?}", event.name);
-				} else {
-					println!("File modified: {:?}", event.name);
-				}
+	fn update_captured_kbs(&mut self) -> Result<Vec<Box<dyn EventObserver>>> {
+		let available_devices = util::get_all_uinput_device_paths()?;
+
+		let mut ans: Vec<Box<dyn EventObserver>> = vec![];
+
+		for (kb_alias, conf) in self.conf.modifications.iter() {
+			let kb_name = self.conf.keyboards.get(kb_alias).unwrap();
+			let kb_path = available_devices.get(kb_name).unwrap();
+			let kb_new_name = format!("{}-{}", "Kbct", kb_name);
+
+			if !self.is_captured_by_path(kb_path) {
+				println!("Capturing device {}", kb_new_name);
+				let mapper = Box::new(KeyboardMapper {
+					file: util::open_readable_uinput_device(kb_path, true)?,
+					device: util::create_writable_uinput_device(&kb_new_name)?,
+					raw_buffer: [0; KeyboardMapper::BUF_SIZE],
+					kbct: Kbct::new(conf.clone(), util::linux_keyname_mapper)?,
+				});
+
+				ans.push(mapper);
+				self.captured_kb_paths.insert(kb_path.clone());
+
+				info!("Capturing device path={} name={:?} mapped_name={:?}",
+							kb_path, kb_name, kb_new_name)
 			}
 		}
-		Ok(ObserverResult::Nothing)
+		Ok(ans)
 	}
 }
 
+impl EventObserver for DeviceManager {
+	fn on_event(&mut self, _: &Event) -> Result<ObserverResult> {
+		use inotify::EventMask;
+		let mut buffer = [0; 1024];
+		let regex: Regex = Regex::new("^(event\\d+)|(__kbct_synthetic_event)$")?;
+		let events = self.inotify.read_events_blocking(&mut buffer)
+			.expect("Error while reading events");
+
+		let has_updates =
+			events.into_iter()
+			.find(|event| regex.is_match(event.name.unwrap().to_str().unwrap()) &&
+				!event.mask.contains(EventMask::ISDIR) &&
+				(event.mask.contains(EventMask::CREATE) ||
+					event.mask.contains(EventMask::DELETE)))
+			.is_some();
+
+		if has_updates {
+			Ok(ObserverResult::SubscribeNew(
+				DeviceManager::update_captured_kbs(self)
+					.expect("Could not capture keyboard")))
+		} else {
+			Ok(ObserverResult::Nothing)
+		}
+	}
+}
+
+
 fn start_mapper(config_file: String) -> Result<()> {
-	pretty_env_logger::init_timed();
+	// TODO timed
+	pretty_env_logger::init();
+
+	let config = KbctConf::parse(
+		std::fs::read_to_string(config_file.as_str())
+			.expect(&format!("Could not open file {}", config_file))
+	).expect("Could not parse the configuration yaml file");
+
+	// TODO REMOVE
+	let config = kbct::KbctRootConf {
+		keyboards: hashmap! {"main".to_string() => "AT Translated Set 2 keyboard".to_string()},
+		modifications: hashmap! {"main".to_string() => config},
+	};
+
 	let mut evloop = EventLoop::new()?;
+
 	SignalReceiver::register(&mut evloop)?;
-	KeyboardMapper::register(&mut evloop, "/dev/input/event2".to_string(), config_file)?;
-	DeviceWatcher::register(&mut evloop)?;
-	println!("Starting...");
+	DeviceManager::register(&mut evloop, config)?;
+	DeviceManager::force_try_capture_device();
+
 	info!("Starting kbct event loop, pid={}", process::id());
 	evloop.run()?;
 
@@ -202,17 +267,8 @@ fn start_mapper(config_file: String) -> Result<()> {
 }
 
 fn show_device_names() -> Result<()> {
-	let paths = fs::read_dir("/dev/input/")?;
-	let regex: Regex = Regex::new("^.*event\\d+$")?;
-
-	for path in paths {
-		let path_buf = path?.path();
-		let device_path = path_buf.to_string_lossy();
-		if regex.is_match(&device_path) {
-			if let Some(device_name) = util::get_uinput_device_name(&device_path.to_string())? {
-				println!("{} {:?}", device_path, device_name);
-			}
-		}
+	for (name, path) in util::get_all_uinput_device_paths()? {
+		println!("{}\t{:?}", path, name)
 	}
 	Ok(())
 }

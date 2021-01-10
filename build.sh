@@ -1,6 +1,6 @@
 
 function buildloop_run() {
-	clear && cargo build
+	clear && cargo build && echo OK
 }
 
 function run_test_in_dir() {

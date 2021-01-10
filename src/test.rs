@@ -34,7 +34,7 @@ fn vec_string(mp: Vec<&str>) -> Vec<String> {
 }
 
 fn create_test_kbct() -> Result<Kbct> {
-	Kbct::new(KbctRootConf {
+	Kbct::new(KbctConf {
 		simple: Some(map_string(hashmap!["3" => "2"])),
 		complex: Some(vec![
 			KbctComplexConf {
@@ -143,7 +143,7 @@ fn test_active_mapping() -> Result<()> {
 
 #[test]
 fn test_create_kbct_fail() -> Result<()> {
-	let kbct = Kbct::new(KbctRootConf {
+	let kbct = Kbct::new(KbctConf {
 		simple: Some(hashmap!["C".to_string() => "D".to_string()]),
 		complex: Some(vec![
 			KbctComplexConf {
@@ -184,7 +184,7 @@ fn test_create_simple_kbct() -> Result<()> {
 	let simple = hashmap! {
         "K1".to_string() => "K2".to_string()
     };
-	let kbct = Kbct::new(KbctRootConf {
+	let kbct = Kbct::new(KbctConf {
 		simple: Some(simple),
 		complex: None,
 	}, create_keymap_func(|x| match x {
@@ -200,17 +200,17 @@ fn test_create_simple_kbct() -> Result<()> {
 #[test]
 fn test_conf_parser() -> Result<()> {
 	let yml = "simple:";
-	let conf = KbctRootConf::parse(yml.to_string())?;
+	let conf = KbctConf::parse(yml.to_string())?;
 	assert_eq!(None, conf.simple);
 	assert_eq!(None, conf.complex);
 
 	let yml = "ignored_key: 12";
-	let conf = KbctRootConf::parse(yml.to_string())?;
+	let conf = KbctConf::parse(yml.to_string())?;
 	assert_eq!(None, conf.simple);
 	assert_eq!(None, conf.complex);
 
 	let yml = "simple:\n  KEY: VALUE\n";
-	let conf = KbctRootConf::parse(yml.to_string())?;
+	let conf = KbctConf::parse(yml.to_string())?;
 	assert!(conf.simple.is_some());
 	assert_eq!(None, conf.complex);
 	let map = conf.simple.unwrap();
@@ -218,7 +218,7 @@ fn test_conf_parser() -> Result<()> {
 	assert_eq!(1, map.len());
 
 	let yml = "complex:\n- modifiers: ['LEFT_ALT']\n  keymap:\n    KEY_I: UP_ARROW";
-	let conf = KbctRootConf::parse(yml.to_string())?;
+	let conf = KbctConf::parse(yml.to_string())?;
 	assert!(conf.complex.is_some());
 	let complex_vec = conf.complex.unwrap();
 	let conf = complex_vec.get(0).unwrap();
@@ -228,11 +228,11 @@ fn test_conf_parser() -> Result<()> {
 	assert_eq!("LEFT_ALT", conf.modifiers.first().unwrap());
 
 	let yml = "complex:\n  modifiers: ['LEFT_ALT']";
-	let conf = KbctRootConf::parse(yml.to_string());
+	let conf = KbctConf::parse(yml.to_string());
 	assert!(conf.is_err());
 
 	let yml = "complex:\n  keymap:\n    KEY_I: UP_ARROW";
-	let conf = KbctRootConf::parse(yml.to_string());
+	let conf = KbctConf::parse(yml.to_string());
 	assert!(conf.is_err());
 
 	Ok(())

@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 
 
-use std::{thread, time, io};
+use std::{thread, time, io, fs};
 
 use uinput::Device;
 use uinput::device::Builder;
@@ -32,6 +32,7 @@ use std::sync::{Mutex, Arc};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use mio::unix::SourceFd;
 use regex::Regex;
+use std::collections::HashMap;
 
 const EVIOCGRAB: u32 = 1074021776;
 const EVIOCGNAME_256: u32 = 2164278534;
@@ -39,13 +40,30 @@ const EVIOCGNAME_256: u32 = 2164278534;
 pub fn get_uinput_device_name(dev_file_path: &String) -> Result<Option<String>> {
 	let file = OpenOptions::new().read(true).write(false).open(&dev_file_path)?;
 	let buff = [0u8; 256];
-	match unsafe {
-		(ioctl_rs::ioctl(file.as_raw_fd(), EVIOCGNAME_256, &buff),
-		 Error::last_os_error().raw_os_error())
-	} {
-		(len, Some(0)) if len > 0 => Ok(Some(std::str::from_utf8(&buff[..(len - 1) as usize]).map(|x| x.to_string())?)),
-		_ => Err(KbctError::IOError(Error::last_os_error()))
+	let str_len = unsafe {
+		ioctl_rs::ioctl(file.as_raw_fd(), EVIOCGNAME_256, &buff)
+	};
+	if str_len > 0 {
+		Ok(Some(std::str::from_utf8(&buff[..(str_len - 1) as usize]).map(|x| x.to_string())?))
+	} else {
+		Err(KbctError::IOError(Error::last_os_error()))
 	}
+}
+
+pub fn get_all_uinput_device_paths() -> Result<HashMap<String, String>> {
+	let paths = fs::read_dir("/dev/input/")?;
+	let regex: Regex = Regex::new("^.*event\\d+$")?;
+	let mut ans = hashmap![];
+	for path in paths {
+		let path_buf = path?.path();
+		let device_path = path_buf.to_string_lossy();
+		if regex.is_match(&device_path) {
+			if let Some(device_name) = get_uinput_device_name(&device_path.to_string())? {
+				ans.insert(device_name, (*device_path.to_string()).to_string());
+			}
+		}
+	}
+	Ok(ans)
 }
 
 pub fn open_readable_uinput_device(dev_file_path: &String, should_grab: bool) -> Result<File> {
@@ -57,6 +75,13 @@ pub fn open_readable_uinput_device(dev_file_path: &String, should_grab: bool) ->
 		}
 	} else {
 		Ok(file)
+	}
+}
+
+pub fn linux_keyname_mapper(name: &String) -> Option<i32> {
+	match name_to_code(format!("KEY_{}", name.to_uppercase()).as_str()) {
+		-1 => None,
+		x => Some(x)
 	}
 }
 
@@ -73,19 +98,6 @@ pub fn create_writable_uinput_device(name: &String) -> Result<Device> {
 	}
 	let x = builder.create()?;
 	Ok(x)
-}
-
-pub fn find_input_device_by_name(name: &String) -> String {
-	let raw = Command::new("bash")
-		.arg("-c")
-		.arg(format!(
-			"cat /proc/bus/input/devices | grep -A 5 -B 2 {} | grep Handlers | grep -oE 'event[0-9]+'",
-			name)
-		)
-		.output()
-		.expect("Failed to get")
-		.stdout;
-	String::from_utf8_lossy(&raw).to_string().trim().to_string()
 }
 
 
@@ -216,8 +228,9 @@ pub fn replay(test_file: String, kbct_config_file: String) -> Result<()> {
 
 	let device_name = "DummyDevice".to_string();
 	let mut device = create_writable_uinput_device(&device_name)?;
-	let device_name = find_input_device_by_name(&device_name);
-	let device_file = open_readable_uinput_device(&format!("/dev/input/{}", device_name), true)?;
+	let all_devices = get_all_uinput_device_paths()?;
+	let device_path = all_devices.get(&device_name).unwrap();
+	let device_file = open_readable_uinput_device(device_path, true)?;
 
 	let lines = {
 		let file = File::open(test_file)?;
@@ -232,7 +245,7 @@ pub fn replay(test_file: String, kbct_config_file: String) -> Result<()> {
 	let mut kbct = {
 		let config = std::fs::read_to_string(kbct_config_file)
 			.expect("Could not open config yaml file");
-		let conf = kbct::KbctRootConf::parse(config)
+		let conf = kbct::KbctConf::parse(config)
 			.expect("Illegal config yaml file");
 		Kbct::new(conf, |x| match name_to_code(format!("KEY_{}", x.to_uppercase()).as_str()) {
 			-1 => None,
