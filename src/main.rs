@@ -182,12 +182,10 @@ impl DeviceManager {
 	}
 
 	fn is_captured_by_path(&self, device: &String) -> bool {
-		println!("{:?} {}", self.captured_kb_paths, device);
 		self.captured_kb_paths.contains(device)
 	}
 
 	fn mark_captured(&mut self, device: &String) {
-		println!("{:?}", self.captured_kb_paths);
 		self.captured_kb_paths.insert(device.clone());
 	}
 

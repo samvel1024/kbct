@@ -13,6 +13,7 @@ use thiserror::Error;
 use linked_hash_map::LinkedHashMap;
 use std::ptr::hash;
 use std::str::Utf8Error;
+use log::{warn, error, info};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 struct KbctComplexConf {
@@ -272,7 +273,7 @@ impl Kbct {
 			}
 			(Clicked, Released) | (Pressed, Released) => {
 				if prev_state.is_none() {
-					println!("WARNING: key press was not recorded, skipping");
+					warn!("WARNING: key press was not recorded, skipping");
 				} else {
 					let prev_mapped_code = prev_state.unwrap().mapped_code;
 					let down_keys = self.mapped_to_source.get(&prev_mapped_code)
