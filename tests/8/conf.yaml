@@ -1,6 +1,10 @@
-simple:
-  1: 2
-complex:
-  - modifiers: ['A']
-    keymap:
-      2: 3
+keyboards:
+  main: "DummyDevice"
+modifications:
+  main:
+    simple:
+      1: 2
+    complex:
+      - modifiers: ['A']
+        keymap:
+          2: 3

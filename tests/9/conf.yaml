@@ -1,7 +1,11 @@
-complex:
-  - modifiers: ['space']
-    keymap:
-      i: up
-      j: left
-      k: down
-      l: right
+keyboards:
+  main: "DummyDevice"
+modifications:
+  main:
+    complex:
+      - modifiers: ['space']
+        keymap:
+          i: up
+          j: left
+          k: down
+          l: right

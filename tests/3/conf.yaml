@@ -1,2 +1,6 @@
-simple:
-  1: 2
+keyboards:
+  main: "DummyDevice"
+modifications:
+  main:
+    simple:
+      1: 2

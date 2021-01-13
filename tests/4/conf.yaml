@@ -1,6 +1,10 @@
-complex:
-  - modifiers: [ 'l' ]
-    keymap:
-      1: 2
-      2: 1
-      3: 2
+keyboards:
+  main: "DummyDevice"
+modifications:
+  main:
+    complex:
+      - modifiers: [ 'l' ]
+        keymap:
+          1: 2
+          2: 1
+          3: 2

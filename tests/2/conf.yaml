@@ -1,7 +1,11 @@
-simple:
-  leftalt: rightalt
+keyboards:
+  main: "DummyDevice"
+modifications:
+  main:
+    simple:
+      leftalt: rightalt
 
-complex:
-  - modifiers: ['rightalt']
-    keymap:
-      i: up
+    complex:
+      - modifiers: ['rightalt']
+        keymap:
+          i: up

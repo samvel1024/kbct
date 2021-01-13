@@ -33,7 +33,9 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use mio::unix::SourceFd;
 use regex::Regex;
 use std::collections::HashMap;
+use log::info;
 
+// ioctl constants obtained from uinput C library
 const EVIOCGRAB: u32 = 1074021776;
 const EVIOCGNAME_256: u32 = 2164278534;
 
@@ -222,15 +224,20 @@ fn read_keyboard_output(mut device_file: File, receiver: Receiver<ReplayMessage>
 }
 
 
-pub fn replay(test_file: String, kbct_config_file: String) -> Result<()> {
+pub fn replay(test_file: String) -> Result<()> {
 	use ReplayMessage::*;
 	use kbct::KbctKeyStatus::*;
 
 	let device_name = "DummyDevice".to_string();
 	let mut device = create_writable_uinput_device(&device_name)?;
+
+	// Allow some time for the kbct process to capture the new device
+	thread::sleep(time::Duration::from_millis(500));
+
 	let all_devices = get_all_uinput_device_paths()?;
-	let device_path = all_devices.get(&device_name).unwrap();
-	let device_file = open_readable_uinput_device(device_path, true)?;
+	let mapped_device_path = all_devices.get("Kbct-DummyDevice")
+		.expect("The mapped device is not mounted yet, make sure you run kbct in parallel before replay");
+	let mapped_device_file = open_readable_uinput_device(mapped_device_path, true)?;
 
 	let lines = {
 		let file = File::open(test_file)?;
@@ -239,19 +246,9 @@ pub fn replay(test_file: String, kbct_config_file: String) -> Result<()> {
 	let (send_wait_for_assert, recv) = channel();
 	let (send_wait_for_key, receive_wait_for_key) = channel();
 	let thread = thread::spawn(move || {
-		read_keyboard_output(device_file, recv, send_wait_for_key).unwrap();
+		read_keyboard_output(mapped_device_file, recv, send_wait_for_key).unwrap();
 	});
 
-	let mut kbct = {
-		let config = std::fs::read_to_string(kbct_config_file)
-			.expect("Could not open config yaml file");
-		let conf = kbct::KbctConf::parse(config)
-			.expect("Illegal config yaml file");
-		Kbct::new(conf, |x| match name_to_code(format!("KEY_{}", x.to_uppercase()).as_str()) {
-			-1 => None,
-			x => Some(x)
-		}).unwrap()
-	};
 
 	let mut line_number = 1;
 	for line in lines {
@@ -261,23 +258,7 @@ pub fn replay(test_file: String, kbct_config_file: String) -> Result<()> {
 				continue;
 			}
 			let ev = parse_test_case(&line.as_str(), line_number);
-			let mapping = kbct.map_event(KbctEvent {
-				code: ev.source.keycode,
-				ev_type: match ev.source.statuscode {
-					1 => Clicked,
-					2 => Pressed,
-					0 => Released,
-					_ => panic!("Illegal value")
-				},
-			});
-			for ev in mapping {
-				let status = match ev.ev_type {
-					Clicked => 1,
-					Pressed => 2,
-					ForceReleased | Released => 0,
-				};
-				device.write(EV_KEY, ev.code, status)?;
-			}
+			device.write(EV_KEY, ev.source.keycode, ev.source.statuscode)?;
 			device.synchronize()?;
 
 
@@ -298,6 +279,8 @@ pub fn replay(test_file: String, kbct_config_file: String) -> Result<()> {
 		}
 	}
 	send_wait_for_assert.send(Finish).unwrap();
+	println!("Tests passed");
+
 	match thread.join() {
 		Ok(_) => Ok(()),
 		Err(_) => Err(KbctError::Error("Error joining thread".to_string())),

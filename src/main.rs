@@ -112,34 +112,38 @@ impl KeyboardMapper {
 impl EventObserver for KeyboardMapper {
 	fn on_event(&mut self, _: &Event) -> Result<ObserverResult> {
 		// trace!("vent")
-		let events_count = self.file.read(&mut self.raw_buffer)? / mem::size_of::<input_event>();
-		let events = unsafe {
-			mem::transmute::<[u8; KeyboardMapper::BUF_SIZE], [input_event; KeyboardMapper::MAX_EVS]>(self.raw_buffer)
-		};
+		if let Ok(bytes_read) = self.file.read(&mut self.raw_buffer) {
+			let events_count = bytes_read / mem::size_of::<input_event>();
+			let events = unsafe {
+				mem::transmute::<[u8; KeyboardMapper::BUF_SIZE], [input_event; KeyboardMapper::MAX_EVS]>(self.raw_buffer)
+			};
 
-		for i in 0..events_count {
-			let x = events[i];
-			if events[i].kind == EV_KEY as u16 {
-				let ev = match events[i].value {
-					0 => Released,
-					2 => Pressed,
-					1 => Clicked,
-					_ => panic!("Unknown event value")
-				};
-				let result = self.kbct.map_event(KbctEvent { code: events[i].code as i32, ev_type: ev });
-				for x in result {
-					let value = match x.ev_type {
-						Released | ForceReleased => 0,
-						Pressed => 2,
-						Clicked => 1,
+			for i in 0..events_count {
+				let x = events[i];
+				if events[i].kind == EV_KEY as u16 {
+					let ev = match events[i].value {
+						0 => Released,
+						2 => Pressed,
+						1 => Clicked,
+						_ => panic!("Unknown event value")
 					};
-					self.device.write(EV_KEY, x.code, value)?;
+					let result = self.kbct.map_event(KbctEvent { code: events[i].code as i32, ev_type: ev });
+					for x in result {
+						let value = match x.ev_type {
+							Released | ForceReleased => 0,
+							Pressed => 2,
+							Clicked => 1,
+						};
+						self.device.write(EV_KEY, x.code, value)?;
+					}
+				} else {
+					self.device.write(x.kind as i32, x.code as i32, x.value)?;
 				}
-			} else {
-				self.device.write(x.kind as i32, x.code as i32, x.value)?;
 			}
+			Ok(ObserverResult::Nothing)
+		} else {
+			Ok(ObserverResult::Unsubcribe)
 		}
-		Ok(ObserverResult::Nothing)
 	}
 
 	fn get_source_fd(&self) -> SourceFd {
@@ -181,24 +185,28 @@ impl DeviceManager {
 		});
 	}
 
-	fn is_captured_by_path(&self, device: &String) -> bool {
-		self.captured_kb_paths.contains(device)
-	}
-
-	fn mark_captured(&mut self, device: &String) {
-		self.captured_kb_paths.insert(device.clone());
-	}
-
-
 	fn update_captured_kbs(&mut self) -> Result<Vec<Box<dyn EventObserver>>> {
-		let available_devices = util::get_all_uinput_device_paths()?;
+		let available_kbs = util::get_all_uinput_device_paths()?;
+
+		let available_kb_paths: HashMap<&String, &String> = available_kbs.iter()
+			.map(|x| (x.1, x.0)).collect();
+
+		self.captured_kb_paths.retain(|x| {
+			if available_kb_paths.contains_key(x) {
+				info!("Ejected device name={:?} path={:?}", available_kb_paths.get(x).unwrap(), x);
+				true
+			} else {
+				false
+			}
+		});
+
 
 		let mut ans: Vec<Box<dyn EventObserver>> = vec![];
 
 		for (kb_alias, conf) in self.conf.modifications.iter() {
 			if let Some(kb_name) = self.conf.keyboards.get(kb_alias) {
-				if let Some(kb_path) = available_devices.get(kb_name) {
-					if !self.is_captured_by_path(kb_path) {
+				if let Some(kb_path) = available_kbs.get(kb_name) {
+					if !self.captured_kb_paths.contains(kb_path) {
 						let kb_new_name = format!("{}-{}", "Kbct", kb_name);
 						let file = util::open_readable_uinput_device(kb_path, true)?;
 						let raw_fd = file.as_raw_fd();
@@ -303,8 +311,6 @@ enum SubCommand {
 struct CliTestReplay {
 	#[clap(short, long)]
 	testcase: String,
-	#[clap(short, long)]
-	config: String,
 }
 
 #[derive(Clap)]
@@ -321,7 +327,7 @@ fn main() -> Result<()> {
 	use SubCommand::*;
 	match root_opts.subcmd {
 		TestReplay(args) => {
-			util::replay(args.testcase, args.config)?;
+			util::replay(args.testcase)?;
 		}
 		Remap(args) => {
 			start_mapper(args.config)?;

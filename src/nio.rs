@@ -5,8 +5,9 @@ use std::io::{ErrorKind, Error};
 use std::os::unix::io::RawFd;
 use mio::unix::SourceFd;
 use kbct::{Result, KbctError};
-use mio::event::Event;
+use mio::event::{Event, Source};
 use kbct::KbctError::IOError;
+use log::info;
 
 const EVENTS_CAPACITY: usize = 1024;
 
@@ -51,7 +52,10 @@ impl EventLoop {
 				let handler = self.registrar.handlers.get_mut(&ev.token()).unwrap();
 				match handler.on_event(ev)? {
 					ObserverResult::Nothing => {}
-					ObserverResult::Unsubcribe => { unimplemented!() }
+					ObserverResult::Unsubcribe => {
+						handler.get_source_fd().deregister(self.registrar.poll.registry())?;
+						self.registrar.handlers.remove(&ev.token());
+					}
 					ObserverResult::Terminate { status: _status } => {
 						self.registrar.running = false;
 					}
