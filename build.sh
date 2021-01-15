@@ -40,8 +40,10 @@ function run_integration_test(){
 	dir=$1
 	echo "Running tests in $dir"
 
+	sudo echo ""
+
 	export RUST_LOG="DEBUG"
-	export RUST_BACKTRACE=1
+#	export RUST_BACKTRACE=1
 
 	sudo -E kbct remap -c "$dir/conf.yaml" &
 	kbct_pid=$!
@@ -56,7 +58,7 @@ function run_integration_test(){
 	unset RUST_BACKTRACE
 
 	[[ test_status -eq "0" ]] && \
-	 echo "$(tput setaf 2)Passed test "$dir"$(tput sgr0)" || \
+	 echo "$(tput setaf 2)Passed test $dir$(tput sgr0)" || \
 	 (echo "Error in test $dir" && test_fail)
 
 }
@@ -64,7 +66,7 @@ function run_integration_test(){
 function run_all_integration_tests() {
 	for dir in ./tests/*; do
 		echo "$dir"
-		run_integration_test "$dir"
+		run_integration_test "$dir" || break
 	done && \
   test_passed
 

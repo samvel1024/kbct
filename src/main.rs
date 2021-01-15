@@ -121,19 +121,10 @@ impl EventObserver for KeyboardMapper {
 			for i in 0..events_count {
 				let x = events[i];
 				if events[i].kind == EV_KEY as u16 {
-					let ev = match events[i].value {
-						0 => Released,
-						2 => Pressed,
-						1 => Clicked,
-						_ => panic!("Unknown event value")
-					};
+					let ev = util::map_status_from_linux(events[i].value);
 					let result = self.kbct.map_event(KbctEvent { code: events[i].code as i32, ev_type: ev });
 					for x in result {
-						let value = match x.ev_type {
-							Released | ForceReleased => 0,
-							Pressed => 2,
-							Clicked => 1,
-						};
+						let value = util::map_status_from_kbct(x.ev_type);
 						self.device.write(EV_KEY, x.code, value)?;
 					}
 				} else {
@@ -262,9 +253,6 @@ impl EventObserver for DeviceManager {
 
 
 fn start_mapper(config_file: String) -> Result<()> {
-	// TODO timed
-	pretty_env_logger::init();
-
 	let config = KbctRootConf::parse(
 		std::fs::read_to_string(config_file.as_str())
 			.expect(&format!("Could not open file {}", config_file))
@@ -323,11 +311,12 @@ struct CliRemap {
 struct ListDevices {}
 
 fn main() -> Result<()> {
+	pretty_env_logger::init();
 	let root_opts: CliRoot = CliRoot::parse();
 	use SubCommand::*;
 	match root_opts.subcmd {
 		TestReplay(args) => {
-			util::replay(args.testcase)?;
+			util::integration_test::replay(args.testcase)?;
 		}
 		Remap(args) => {
 			start_mapper(args.config)?;
