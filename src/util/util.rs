@@ -52,7 +52,7 @@ pub fn get_uinput_device_name(dev_file_path: &String) -> Result<Option<String>> 
 	}
 }
 
-pub fn get_all_uinput_device_paths() -> Result<HashMap<String, String>> {
+pub fn get_all_uinput_device_names_to_paths() -> Result<HashMap<String, String>> {
 	let paths = fs::read_dir("/dev/input/")?;
 	let regex: Regex = Regex::new("^.*event\\d+$")?;
 	let mut ans = hashmap![];
@@ -81,7 +81,7 @@ pub fn open_readable_uinput_device(dev_file_path: &String, should_grab: bool) ->
 }
 
 pub fn linux_keyname_mapper(name: &String) -> Option<i32> {
-	match name_to_code(format!("KEY_{}", name.to_uppercase()).as_str()) {
+	match name_to_code(name) {
 		-1 => None,
 		x => Some(x)
 	}
@@ -151,7 +151,7 @@ impl KeyMapEvent {
 
 
 	fn format_key_event(x: &KeyEvent) -> String {
-		let key = code_to_name(x.keycode).to_string()[4..].to_lowercase();
+		let key = code_to_name(x.keycode);
 		let status = match x.statuscode {
 			1 => "+",
 			0 => "-",

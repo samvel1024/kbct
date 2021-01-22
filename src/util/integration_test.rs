@@ -111,7 +111,7 @@ pub fn replay(test_file: String) -> Result<()> {
 	// Allow some time for the kbct process to capture the new device
 	thread::sleep(time::Duration::from_millis(800));
 
-	let all_devices = get_all_uinput_device_paths()?;
+	let all_devices = get_all_uinput_device_names_to_paths()?;
 	let mapped_device_path = all_devices.get("Kbct-DummyDevice")
 		.expect("The mapped device is not mounted yet, make sure you run kbct in parallel before replay");
 	let mapped_device_file = open_readable_uinput_device(mapped_device_path, true)?;

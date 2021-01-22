@@ -53,6 +53,7 @@ function run_integration_test(){
 	sudo -S -E kbct test-replay -t "$dir/test.txt"
 	test_status=$?
   kbct_pid=$(pgrep kbct | tail -n1)
+	sleep 2
   sudo kill "$kbct_pid"
 	wait "$sudo_pid"
 

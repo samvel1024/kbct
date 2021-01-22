@@ -179,16 +179,16 @@ impl DeviceManager {
 	}
 
 	fn update_captured_kbs(&mut self) -> Result<Vec<Box<dyn EventObserver>>> {
-		let available_kbs = util::get_all_uinput_device_paths()?;
+		let available_kb_names = util::get_all_uinput_device_names_to_paths()?;
 
-		let available_kb_paths: HashMap<&String, &String> = available_kbs.iter()
+		let available_kb_paths: HashMap<&String, &String> = available_kb_names.iter()
 			.map(|x| (x.1, x.0)).collect();
 
 		self.captured_kb_paths.retain(|x| {
 			if available_kb_paths.contains_key(x) {
-				info!("Ejected device name={:?} path={:?}", available_kb_paths.get(x).unwrap(), x);
 				true
 			} else {
+				info!("Ejected device path={:?}", x);
 				false
 			}
 		});
@@ -198,7 +198,7 @@ impl DeviceManager {
 
 		for (kb_alias, conf) in self.conf.modifications.iter() {
 			if let Some(kb_name) = self.conf.keyboards.get(kb_alias) {
-				if let Some(kb_path) = available_kbs.get(kb_name) {
+				if let Some(kb_path) = available_kb_names.get(kb_name) {
 					if !self.captured_kb_paths.contains(kb_path) {
 						let kb_new_name = format!("{}-{}", "Kbct", kb_name);
 						let file = util::open_readable_uinput_device(kb_path, true)?;
@@ -274,7 +274,7 @@ fn start_mapper(config_file: String) -> Result<()> {
 }
 
 fn show_device_names() -> Result<()> {
-	for (name, path) in util::get_all_uinput_device_paths()? {
+	for (name, path) in util::get_all_uinput_device_names_to_paths()? {
 		println!("{}\t{:?}", path, name)
 	}
 	Ok(())
