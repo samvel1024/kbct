@@ -1,0 +1,8 @@
+keyboards:
+  main: "DummyDevice"
+modifications:
+  main:
+    complex:
+      - modifiers: ['A']
+        keymap:
+          1: 2

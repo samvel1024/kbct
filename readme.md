@@ -24,7 +24,7 @@ When is kbct useful?
 
 Kbct uses yaml files as configuration. It allows to apply different mapping rules for different keyboards. There are two main types of key mappings
 
-- `simple`: maps keys regardless of any modifiers. (e.g `capslock -> leftctrl`)
+- `simple`: maps keys 1-1 regardless of any modifiers. (e.g `capslock -> leftctrl`)
 
 - `complex`: maps keys based on the active layer. Layer is a key map that will activate and override the existing mapping if a given set of keys are pressed. Much like `fn` key is combined with `F1-F12` keys. (e.g `rightalt+i=up` or `rightalt+leftctrl+comma=volumeup` )
 
@@ -35,7 +35,7 @@ Kbct uses yaml files as configuration. It allows to apply different mapping rule
 main: 
   # A regex selecting the keyboards that need to be mapped 
   keyboard: "(Thinkpad.*|AT Translated Set 2 keyboard)"
-  # Specifiy one-to-one key mappings here
+  # Specifiy one-to-one key mappings
   simple:
     leftalt: leftctrl
     capslock: leftalt
@@ -55,19 +55,25 @@ main:
         semicolon: end
 ```
 
-In order to list all the available keyboard devices and their respective names run. You can use those names in the `keyboard` field to apply the configuration.
+[Here]([kbct/Cargo.lock at master · samvel1024/kbct · GitHub](https://github.com/samvel1024/kbct/blob/master/Cargo.lock)) you can find all the available key names to use in the configuration. Essentially those are taken from Linux API [headers]([linux/input-event-codes.h at master · torvalds/linux · GitHub](https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h)).
+
+
+
+In order to list all the available keyboard devices and their respective names run the following.
 
 ```bash
 sudo kbct list-devices
 ```
 
-[Here]([kbct/Cargo.lock at master · samvel1024/kbct · GitHub](https://github.com/samvel1024/kbct/blob/master/Cargo.lock)) you can find all the available key names to use in the configuration. Essentially those are taken from Linux API [headers]([linux/input-event-codes.h at master · torvalds/linux · GitHub](https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h)).
+You can use those names to create a regex matcher for the `keyboard` field in the configuration
+
+
 
 **Important note:** kbct is treating `leftshift`/`rightshift` , `leftalt`/`rightalt`, etc. as different keys, so if you want to map both you need to define the mapping twice. This is done to avoid 
 
 ### How it works
 
-![img](https://i.imgur.com/n5Wn0YJ.jpg)
+<img title="" src="https://i.imgur.com/n5Wn0YJ.jpg" alt="img" width="839">
 
 KBCT is operating on a low enough level to be independent from the window manager or the desktop environment. It is achieved by the following steps
 

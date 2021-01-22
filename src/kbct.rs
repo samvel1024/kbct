@@ -13,7 +13,7 @@ use thiserror::Error;
 use linked_hash_map::LinkedHashMap;
 use std::ptr::hash;
 use std::str::Utf8Error;
-use log::{warn, error, info};
+use log::{warn, error, info, debug};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 struct KbctComplexConf {
@@ -98,7 +98,7 @@ pub struct Kbct {
 }
 
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KbctEvent {
 	pub code: Keycode,
 	pub ev_type: KbctKeyStatus,
@@ -267,7 +267,7 @@ impl Kbct {
 					.collect();
 				self.change_key_state(not_mapped, complex_mapped, Clicked);
 				for x in &result {
-					self.change_key_state(self.get_last_source_mapping_to(x.code).unwrap(), x.code, ForceReleased);
+					self.change_key_state(self.get_last_source_mapping_to(x.code).unwrap(), x.code, x.ev_type);
 				}
 				result.push(Kbct::make_ev(complex_mapped, Clicked));
 			}

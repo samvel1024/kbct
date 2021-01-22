@@ -118,3 +118,57 @@ pub fn map_status_from_kbct(val: KbctKeyStatus) -> i32 {
 		KbctKeyStatus::Pressed => 2,
 	}
 }
+
+#[derive(PartialEq, Clone)]
+pub struct KeyEvent {
+	pub keycode: i32,
+	pub statuscode: i32,
+}
+
+impl KeyEvent {
+	fn from_kbct_event(ev: &KbctEvent) -> KeyEvent {
+		KeyEvent {
+			keycode: ev.code,
+			statuscode: map_status_from_kbct(ev.ev_type)
+		}
+	}
+}
+
+#[derive(Clone)]
+pub struct KeyMapEvent {
+	pub input: KeyEvent,
+	pub output: Vec<KeyEvent>,
+}
+
+impl KeyMapEvent {
+
+	pub fn from_kbct_event(input: KbctEvent, output: &Vec<KbctEvent>) -> KeyMapEvent {
+		KeyMapEvent {
+			input: KeyEvent::from_kbct_event(&input),
+			output: output.iter().map(|x| KeyEvent::from_kbct_event(x)).collect()
+		}
+	}
+
+
+	fn format_key_event(x: &KeyEvent) -> String {
+		let key = code_to_name(x.keycode).to_string()[4..].to_lowercase();
+		let status = match x.statuscode {
+			1 => "+",
+			0 => "-",
+			2 => "=",
+			_ => panic!("Illegal val")
+		};
+		format!("{}{}", status.to_string(), key)
+	}
+}
+
+impl fmt::Display for KeyMapEvent {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let target_arr: Vec<String> = self.output.iter()
+			.map(|x| KeyMapEvent::format_key_event(x))
+			.collect();
+		let target_str = target_arr.join(",");
+		write!(f, "{} -> {}", KeyMapEvent::format_key_event(
+			&self.input), target_str)
+	}
+}

@@ -14,6 +14,7 @@ use std::io::{Read, BufRead};
 use std::{thread, io};
 use regex::Regex;
 use std::os::unix::io::AsRawFd;
+use crate::util::{KeyMapEvent, KeyEvent};
 
 #[derive(PartialEq)]
 enum ReplayMessage {
@@ -22,44 +23,8 @@ enum ReplayMessage {
 	Finish,
 }
 
-#[derive(PartialEq, Clone)]
-struct KeyEvent {
-	keycode: i32,
-	statuscode: i32,
-}
 
-#[derive(Clone)]
-struct TestCase {
-	source: KeyEvent,
-	expected: Vec<KeyEvent>,
-}
-
-
-impl TestCase {
-	fn format_key_event(x: &KeyEvent) -> String {
-		let key = code_to_name(x.keycode).to_string();
-		let status = match x.statuscode {
-			1 => "DOWN",
-			0 => "UP",
-			2 => "PRESS",
-			_ => panic!("Illegal val")
-		};
-		format!("({}, {})", key, status.to_string())
-	}
-}
-
-impl fmt::Display for TestCase {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let target_arr: Vec<String> = self.expected.iter()
-			.map(|x| TestCase::format_key_event(x))
-			.collect();
-		let target_str = target_arr.join(",");
-		write!(f, "TestCase{{from:{}, to:[{}]}}", TestCase::format_key_event(
-			&self.source), target_str)
-	}
-}
-
-fn parse_test_case(line: &str, line_number: i32) -> TestCase {
+fn parse_test_case(line: &str, line_number: i32) -> KeyMapEvent {
 	fn parse_key(str: &str) -> KeyEvent {
 		let first = str.chars().nth(0).unwrap();
 		let statuscode = match first {
@@ -86,9 +51,9 @@ fn parse_test_case(line: &str, line_number: i32) -> TestCase {
 		.filter(|x| !x.is_empty())
 		.map(|x| parse_key(x.trim()))
 		.collect();
-	TestCase {
-		source: left,
-		expected: right,
+	KeyMapEvent {
+		input: left,
+		output: right,
 	}
 }
 
@@ -170,7 +135,7 @@ pub fn replay(test_file: String) -> Result<()> {
 				continue;
 			}
 			let ev = parse_test_case(&line.as_str(), line_number);
-			device.write(EV_KEY, ev.source.keycode, ev.source.statuscode)?;
+			device.write(EV_KEY, ev.input.keycode, ev.input.statuscode)?;
 			device.synchronize()?;
 
 
@@ -178,9 +143,9 @@ pub fn replay(test_file: String) -> Result<()> {
 			match receive_wait_for_key.recv().expect("Coult not receive") {
 				MappedResult(result) => {
 					let expected_str = format!("{}", ev);
-					let actual = TestCase {
-						source: ev.source,
-						expected: result,
+					let actual = KeyMapEvent {
+						input: ev.input,
+						output: result,
 					};
 					let actual_str = format!("{}", actual);
 					assert_eq!(expected_str, actual_str, "Wrong output on line {}", line_number);
@@ -205,7 +170,7 @@ mod tests {
 	#[test]
 	fn test_parse_test_case() {
 		fn t(s: &str) -> String {
-			format!("{}", crate::util::util::parse_test_case(s, 1))
+			format!("{}", crate::util::integration_test::parse_test_case(s, 1))
 		}
 		assert_eq!(
 			"TestCase{from:(KEY_A, DOWN), to:[(KEY_B, DOWN)]}",

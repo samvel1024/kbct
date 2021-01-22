@@ -2,7 +2,7 @@
 ########### UTILS FOR DEVELOPMENT #################
 
 function buildloop_run() {
-	clear && cargo build && echo OK
+	clear && cargo build && run_integration_test ./tests/10
 }
 
 function buildloop() {
@@ -37,6 +37,8 @@ function test_passed() {
 
 
 function run_integration_test(){
+	sudo echo ""
+	sleep 0.2
 	dir=$1
 	echo "Running tests in $dir"
 
@@ -46,13 +48,13 @@ function run_integration_test(){
 #	export RUST_BACKTRACE=1
 
 	sudo -E kbct remap -c "$dir/conf.yaml" &
-	kbct_pid=$!
+	sudo_pid=$!
 
-	sudo -E kbct test-replay -t "$dir/test.txt"
+	sudo -S -E kbct test-replay -t "$dir/test.txt"
 	test_status=$?
-
-	sudo kill "$kbct_pid"
-	wait "$kbct_pid"
+  kbct_pid=$(pgrep kbct | tail -n1)
+  sudo kill "$kbct_pid"
+	wait "$sudo_pid"
 
 	unset RUST_LOG
 	unset RUST_BACKTRACE

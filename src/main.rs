@@ -122,7 +122,9 @@ impl EventObserver for KeyboardMapper {
 				let x = events[i];
 				if events[i].kind == EV_KEY as u16 {
 					let ev = util::map_status_from_linux(events[i].value);
-					let result = self.kbct.map_event(KbctEvent { code: events[i].code as i32, ev_type: ev });
+					let input_event = KbctEvent { code: events[i].code as i32, ev_type: ev };
+					let result = self.kbct.map_event(input_event.clone());
+					debug!("{}", util::KeyMapEvent::from_kbct_event(input_event, &result));
 					for x in result {
 						let value = util::map_status_from_kbct(x.ev_type);
 						self.device.write(EV_KEY, x.code, value)?;
@@ -310,7 +312,7 @@ struct CliRemap {
 #[derive(Clap)]
 struct ListDevices {}
 
-fn main() -> Result<()> {
+ fn main() -> Result<()> {
 	pretty_env_logger::init();
 	let root_opts: CliRoot = CliRoot::parse();
 	use SubCommand::*;
