@@ -85,7 +85,7 @@ main:
         semicolon: end
 ```
 
-[Here](https://github.com/samvel1024/kbct/blob/master/Cargo.lock) you can find all the available key names to use in the configuration. Essentially those are taken from Linux API [headers]([linux/input-event-codes.h at master · torvalds/linux · GitHub](https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h)).
+[Here](https://github.com/samvel1024/kbct/blob/master/Cargo.lock) you can find all the available key names to use in the configuration. Essentially those are taken from Linux API [headers](https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h).
 
 In order to list all the available keyboard devices and their respective names run the following.
 
@@ -110,6 +110,10 @@ You can use `evtest` to monitor the output of the kbct-mapped virtual device by 
 ```bash
 sudo kbct list-devices | grep -i kbct | awk '{ print $1 }' | sudo xargs evtest 
 ```
+
+
+
+
 
 
 
