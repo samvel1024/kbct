@@ -1228,6 +1228,6 @@ pub fn name_to_code(x: &str) -> i32 {
 		"btn_trigger_happy39" => 0x2e6,
 		"btn_trigger_happy40" => 0x2e7,
 		"max" => 0x2ff,
-		_ => panic!(format!("Unknown key name {}", x))
+		_ => -1
 	}
 }

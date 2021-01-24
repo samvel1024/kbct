@@ -88,7 +88,7 @@ impl KeyboardMapper {
 
 		let kbct = Kbct::new(
 			kbct_conf,
-			|x| match util::keycodes::name_to_code(format!("KEY_{}", x.to_uppercase()).as_str()) {
+			|x| match util::keycodes::name_to_code(x) {
 				-1 => None,
 				x => Some(x)
 			}).expect("Could not create kbct instance");

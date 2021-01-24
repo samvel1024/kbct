@@ -3,6 +3,6 @@ keyboards:
 modifications:
   main:
     complex:
-      - modifiers: ['A']
+      - modifiers: ['a']
         keymap:
           1: 2

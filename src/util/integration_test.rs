@@ -33,7 +33,7 @@ fn parse_test_case(line: &str, line_number: i32) -> KeyMapEvent {
 			'-' => 0,
 			_ => panic!("Illegal state")
 		};
-		let keycode = name_to_code(format!("KEY_{}", &str[1..].to_uppercase()).as_str());
+		let keycode = name_to_code(&str[1..]);
 		KeyEvent {
 			keycode,
 			statuscode,
