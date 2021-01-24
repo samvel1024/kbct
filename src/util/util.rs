@@ -39,6 +39,11 @@ use log::info;
 const EVIOCGRAB: u32 = 1074021776;
 const EVIOCGNAME_256: u32 = 2164278534;
 
+const MAX_EVS: usize = 256;
+pub const BUF_SIZE: usize = mem::size_of::<input_event>() * MAX_EVS;
+
+pub type KeyBuffer = [u8; BUF_SIZE];
+
 pub fn get_uinput_device_name(dev_file_path: &String) -> Result<Option<String>> {
 	let file = OpenOptions::new().read(true).write(false).open(&dev_file_path)?;
 	let buff = [0u8; 256];
@@ -119,6 +124,23 @@ pub fn map_status_from_kbct(val: KbctKeyStatus) -> i32 {
 	}
 }
 
+pub fn kbct_from_uinput_event(val: &input_event) -> Option<KbctEvent> {
+	if val.kind as i32 == EV_KEY {
+		Some(KbctEvent { code: val.code as i32, ev_type: map_status_from_linux(val.value) })
+	} else {
+		None
+	}
+}
+
+pub fn read_key_events(file: &mut File, buf: &mut KeyBuffer) -> Result<Vec<input_event>> {
+	let bytes_read = file.read(buf)?;
+	let event_count = bytes_read / mem::size_of::<input_event>();
+	let events = unsafe {
+		mem::transmute::<[u8; BUF_SIZE], [input_event; MAX_EVS]>(*buf)
+	};
+	Ok(events[..event_count].to_vec())
+}
+
 #[derive(PartialEq, Clone)]
 pub struct KeyEvent {
 	pub keycode: i32,
@@ -129,7 +151,7 @@ impl KeyEvent {
 	fn from_kbct_event(ev: &KbctEvent) -> KeyEvent {
 		KeyEvent {
 			keycode: ev.code,
-			statuscode: map_status_from_kbct(ev.ev_type)
+			statuscode: map_status_from_kbct(ev.ev_type),
 		}
 	}
 }
@@ -141,11 +163,10 @@ pub struct KeyMapEvent {
 }
 
 impl KeyMapEvent {
-
 	pub fn from_kbct_event(input: KbctEvent, output: &Vec<KbctEvent>) -> KeyMapEvent {
 		KeyMapEvent {
 			input: KeyEvent::from_kbct_event(&input),
-			output: output.iter().map(|x| KeyEvent::from_kbct_event(x)).collect()
+			output: output.iter().map(|x| KeyEvent::from_kbct_event(x)).collect(),
 		}
 	}
 
