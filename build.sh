@@ -79,23 +79,22 @@ function run_integration_test(){
 
 	sudo echo ""
 
-	export RUST_LOG="DEBUG"
-#	export RUST_BACKTRACE=1
+	export RUST_BACKTRACE=1
 
-	sudo -E kbct remap -c "$dir/conf.yaml" &
+	sudo -E kbct -d remap -c "$dir/conf.yaml" &
 	sudo_pid=$!
 
-	sudo -S -E kbct test-replay -t "$dir/test.txt"
+	sudo -S -E kbct -d test-replay -t "$dir/test.txt"
 	test_status=$?
   kbct_pid=$(pgrep kbct | tail -n1)
-	sleep 2
+
   sudo kill "$kbct_pid"
 	wait "$sudo_pid"
 
 	unset RUST_LOG
 	unset RUST_BACKTRACE
 
-	[[ test_status -eq "0" ]] && \switch
+	[[ test_status -eq "0" ]] && \
 	 echo "$(tput setaf 2)Passed test $dir$(tput sgr0)" || \
 	 (echo "Error in test $dir" && test_fail)
 

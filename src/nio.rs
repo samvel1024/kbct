@@ -1,13 +1,8 @@
-use mio::{Events, Poll, Token, Interest};
-use std::collections::HashMap;
-use std::io;
-use std::io::{ErrorKind, Error};
-use std::os::unix::io::RawFd;
-use mio::unix::SourceFd;
-use kbct::{Result, KbctError};
+use kbct::Result;
 use mio::event::{Event, Source};
-use kbct::KbctError::IOError;
-use log::info;
+use mio::unix::SourceFd;
+use mio::{Events, Interest, Poll, Token};
+use std::collections::HashMap;
 
 const EVENTS_CAPACITY: usize = 1024;
 
@@ -26,9 +21,7 @@ pub struct EventLoopRegistrar {
 pub enum ObserverResult {
 	Nothing,
 	Unsubcribe,
-	Terminate {
-		status: i32
-	},
+	Terminate { status: i32 },
 	SubscribeNew(Vec<Box<dyn EventObserver>>),
 }
 
@@ -53,7 +46,9 @@ impl EventLoop {
 				match handler.on_event(ev)? {
 					ObserverResult::Nothing => {}
 					ObserverResult::Unsubcribe => {
-						handler.get_source_fd().deregister(self.registrar.poll.registry())?;
+						handler
+							.get_source_fd()
+							.deregister(self.registrar.poll.registry())?;
 						self.registrar.handlers.remove(&ev.token());
 					}
 					ObserverResult::Terminate { status: _status } => {
@@ -74,13 +69,20 @@ impl EventLoop {
 		Ok(EventLoop::do_register_observer(&mut self.registrar, obs)?)
 	}
 
-
-	fn do_register_observer(reg: &mut EventLoopRegistrar, obs: Box<dyn EventObserver>) -> Result<()> {
+	fn do_register_observer(
+		reg: &mut EventLoopRegistrar,
+		obs: Box<dyn EventObserver>,
+	) -> Result<()> {
 		let mut fd = obs.get_source_fd();
 		let token = Token(reg.last_token);
 		reg.last_token += 1;
-		reg.poll.registry().register(&mut fd, token, Interest::READABLE)?;
-		assert!(reg.handlers.get(&token).is_none(), "Token handler is already set");
+		reg.poll
+			.registry()
+			.register(&mut fd, token, Interest::READABLE)?;
+		assert!(
+			reg.handlers.get(&token).is_none(),
+			"Token handler is already set"
+		);
 		reg.handlers.insert(token, obs);
 		Ok(())
 	}

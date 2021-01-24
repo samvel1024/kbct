@@ -1,6 +1,6 @@
 use crate::*;
+use std::collections::HashMap;
 use KbctKeyStatus::*;
-use std::collections::{HashMap, BTreeSet};
 
 fn key(str: &str) -> i32 {
 	match str {
@@ -12,14 +12,14 @@ fn key(str: &str) -> i32 {
 		"2" => 12,
 		"3" => 13,
 		"4" => 14,
-		_ => -1
+		_ => -1,
 	}
 }
 
 fn create_keymap_func(f: fn(&str) -> i32) -> impl Fn(&String) -> Option<i32> {
 	move |x: &String| match f(&x[..]) {
 		-1 => None,
-		x => Some(x)
+		x => Some(x),
 	}
 }
 
@@ -34,32 +34,38 @@ fn vec_string(mp: Vec<&str>) -> Vec<String> {
 }
 
 fn create_test_kbct() -> Result<Kbct> {
-	Kbct::new(KbctConf {
-		simple: Some(map_string(hashmap!["3" => "2"])),
-		complex: Some(vec![
-			KbctComplexConf {
-				modifiers: vec_string(vec!["A", "B"]),
-				keymap: map_string(hashmap!["1" => "2", "2" => "1"]),
-			},
-			KbctComplexConf {
-				modifiers: vec_string(vec!["A", "C"]),
-				keymap: map_string(hashmap!["2" => "3"]),
-			},
-			KbctComplexConf {
-				modifiers: vec_string(vec!["A"]),
-				keymap: map_string(hashmap!["1" => "3"]),
-			}
-		]),
-	}, create_keymap_func(key))
+	Kbct::new(
+		KbctConf {
+			simple: Some(map_string(hashmap!["3" => "2"])),
+			complex: Some(vec![
+				KbctComplexConf {
+					modifiers: vec_string(vec!["A", "B"]),
+					keymap: map_string(hashmap!["1" => "2", "2" => "1"]),
+				},
+				KbctComplexConf {
+					modifiers: vec_string(vec!["A", "C"]),
+					keymap: map_string(hashmap!["2" => "3"]),
+				},
+				KbctComplexConf {
+					modifiers: vec_string(vec!["A"]),
+					keymap: map_string(hashmap!["1" => "3"]),
+				},
+			]),
+		},
+		create_keymap_func(key),
+	)
 }
 
 struct KbctTestContext<'a> {
-	kbct: &'a mut Kbct
+	kbct: &'a mut Kbct,
 }
 
 impl<'a> KbctTestContext<'a> {
 	fn run_test(&mut self, s: &str, ev_type: KbctKeyStatus, expected: Vec<(&str, KbctKeyStatus)>) {
-		let exp: Vec<KbctEvent> = expected.iter().map(|(x, y)| Kbct::make_ev(key(x), *y)).collect();
+		let exp: Vec<KbctEvent> = expected
+			.iter()
+			.map(|(x, y)| Kbct::make_ev(key(x), *y))
+			.collect();
 		let result = self.kbct.map_event(Kbct::make_ev(key(s), ev_type));
 		assert_eq!(exp, result);
 	}
@@ -77,10 +83,11 @@ impl<'a> KbctTestContext<'a> {
 	}
 }
 
-
 #[test]
 fn test_map_event() -> Result<()> {
-	let mut test = KbctTestContext { kbct: &mut create_test_kbct().unwrap() };
+	let mut test = KbctTestContext {
+		kbct: &mut create_test_kbct().unwrap(),
+	};
 
 	// Test single key with click and press
 	test.assert_click("A", vec![("A", Clicked)]);
@@ -128,7 +135,6 @@ fn test_active_mapping() -> Result<()> {
 	let active = kbct.get_active_complex_modifiers().unwrap();
 	assert_eq!(btreeset![key("A"), key("C")], *active.0);
 
-
 	let mut kbct = create_test_kbct()?;
 	kbct.map_event(Kbct::make_ev(key("A"), Clicked));
 	let active = kbct.get_active_complex_modifiers().unwrap();
@@ -143,19 +149,22 @@ fn test_active_mapping() -> Result<()> {
 
 #[test]
 fn test_create_kbct_fail() -> Result<()> {
-	let kbct = Kbct::new(KbctConf {
-		simple: Some(hashmap!["C".to_string() => "D".to_string()]),
-		complex: Some(vec![
-			KbctComplexConf {
-				modifiers: vec!["A".to_string(), "B".to_string()],
-				keymap: hashmap!["1".to_string() => "2".to_string(), "2".to_string() => "1".to_string()],
-			},
-			KbctComplexConf {
-				modifiers: vec!["A".to_string()],
-				keymap: hashmap!["1".to_string() => "3".to_string()],
-			}
-		]),
-	}, |_| None);
+	let kbct = Kbct::new(
+		KbctConf {
+			simple: Some(hashmap!["C".to_string() => "D".to_string()]),
+			complex: Some(vec![
+				KbctComplexConf {
+					modifiers: vec!["A".to_string(), "B".to_string()],
+					keymap: hashmap!["1".to_string() => "2".to_string(), "2".to_string() => "1".to_string()],
+				},
+				KbctComplexConf {
+					modifiers: vec!["A".to_string()],
+					keymap: hashmap!["1".to_string() => "3".to_string()],
+				},
+			]),
+		},
+		|_| None,
+	);
 	let err = "Configuration contains unknown keys: \
      {\"1\", \"2\", \"3\", \"A\", \"B\", \"C\", \"D\"}";
 	match kbct {
@@ -166,15 +175,20 @@ fn test_create_kbct_fail() -> Result<()> {
 	Ok(())
 }
 
-
 #[test]
 fn test_create_complex_kbct() -> Result<()> {
 	let kbct = create_test_kbct()?;
 
 	assert_eq!(1, kbct.simple_map.len());
 	assert_eq!(3, kbct.complex_map.len());
-	assert_eq!(hashmap![12 => 11, 11=>12], *kbct.complex_map.get(&btreeset! {1, 2}).unwrap());
-	assert_eq!(hashmap![11 => 13], *kbct.complex_map.get(&btreeset! {1}).unwrap());
+	assert_eq!(
+		hashmap![12 => 11, 11=>12],
+		*kbct.complex_map.get(&btreeset! {1, 2}).unwrap()
+	);
+	assert_eq!(
+		hashmap![11 => 13],
+		*kbct.complex_map.get(&btreeset! {1}).unwrap()
+	);
 
 	Ok(())
 }
@@ -182,16 +196,19 @@ fn test_create_complex_kbct() -> Result<()> {
 #[test]
 fn test_create_simple_kbct() -> Result<()> {
 	let simple = hashmap! {
-        "K1".to_string() => "K2".to_string()
-    };
-	let kbct = Kbct::new(KbctConf {
-		simple: Some(simple),
-		complex: None,
-	}, create_keymap_func(|x| match x {
-		"K1" => 1,
-		"K2" => 2,
-		_ => -1
-	}))?;
+		"K1".to_string() => "K2".to_string()
+	};
+	let kbct = Kbct::new(
+		KbctConf {
+			simple: Some(simple),
+			complex: None,
+		},
+		create_keymap_func(|x| match x {
+			"K1" => 1,
+			"K2" => 2,
+			_ => -1,
+		}),
+	)?;
 	assert_eq!(1, kbct.simple_map.len());
 	assert_eq!(2, *kbct.simple_map.get(&1).unwrap());
 	Ok(())

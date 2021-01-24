@@ -5,6 +5,6 @@ modifications:
     simple:
       1: 2
     complex:
-      - modifiers: ['A']
+      - modifiers: ['a']
         keymap:
           2: 3

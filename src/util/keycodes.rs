@@ -620,10 +620,9 @@ pub fn code_to_name(x: i32) -> &'static str {
 		0x2e6 => "btn_trigger_happy39",
 		0x2e7 => "btn_trigger_happy40",
 		0x2ff => "max",
-		_ => panic!(format!("Unknown keycode {}", x))
+		_ => panic!(format!("Unknown keycode {}", x)),
 	}
 }
-
 
 pub fn name_to_code(x: &str) -> i32 {
 	match x {
@@ -1228,6 +1227,6 @@ pub fn name_to_code(x: &str) -> i32 {
 		"btn_trigger_happy39" => 0x2e6,
 		"btn_trigger_happy40" => 0x2e7,
 		"max" => 0x2ff,
-		_ => -1
+		_ => -1,
 	}
 }

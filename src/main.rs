@@ -1,43 +1,32 @@
-#![allow(unused_imports)]
-#![allow(dead_code)]
 extern crate chrono;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate maplit;
 extern crate pretty_env_logger;
 extern crate uinput;
 extern crate uinput_sys;
-#[macro_use]
-extern crate maplit;
 
-use std::{fs::File, io::{self}, process, fs, thread, time};
 use std::collections::{HashMap, HashSet};
-use std::env;
-use std::fs::OpenOptions;
-use std::io::{Error, ErrorKind, Read};
-use std::mem;
 use std::os::unix::io::{AsRawFd, RawFd};
-use clap::Clap;
+use std::{fs, fs::File, process, thread, time};
 
+use clap::Clap;
 use inotify::Inotify;
-use ioctl_rs;
-use mio::event::{Event, Source};
+use log::LevelFilter;
+use mio::event::Event;
+use mio::unix::SourceFd;
 use nix::sys::signal::SigSet;
 use nix::sys::signalfd::SignalFd;
+use regex::Regex;
 use uinput::Device;
 use uinput_sys::*;
-use uinput_sys::input_event;
+
 use kbct::*;
-use std::sync::atomic::Ordering::Release;
-use uinput::event::keyboard::Function::Press;
-use kbct::KbctKeyStatus::*;
 use nio::*;
-use regex::Regex;
-use crate::util::get_uinput_device_name;
-use mio::{event, Registry, Token, Interest};
-use mio::unix::SourceFd;
-use log::LevelFilter;
 
 struct SignalReceiver {
+	#[allow(dead_code)]
 	signal_fd: SignalFd,
 	raw_fd: RawFd,
 }
@@ -49,19 +38,22 @@ impl SignalReceiver {
 		mask.add(nix::sys::signal::SIGINT);
 		mask.thread_block().unwrap();
 		let sfd = nix::sys::signalfd::SignalFd::with_flags(
-			&mask, nix::sys::signalfd::SfdFlags::SFD_NONBLOCK).unwrap();
+			&mask,
+			nix::sys::signalfd::SfdFlags::SFD_NONBLOCK,
+		)
+		.unwrap();
 		let fd = sfd.as_raw_fd();
-		Ok(Box::new(SignalReceiver { signal_fd: (sfd), raw_fd: fd }))
+		Ok(Box::new(SignalReceiver {
+			signal_fd: (sfd),
+			raw_fd: fd,
+		}))
 	}
 }
-
 
 impl EventObserver for SignalReceiver {
 	fn on_event(&mut self, _: &Event) -> Result<ObserverResult> {
 		info!("Received signal, stopping");
-		Ok(ObserverResult::Terminate {
-			status: 0
-		})
+		Ok(ObserverResult::Terminate { status: 0 })
 	}
 
 	fn get_source_fd(&self) -> SourceFd {
@@ -77,36 +69,6 @@ struct KeyboardMapper {
 	raw_fd: RawFd,
 }
 
-impl KeyboardMapper {
-	fn new(dev_file: String, config_file: String) -> Result<Box<KeyboardMapper>> {
-		let kbct_conf_yaml = std::fs::read_to_string(config_file.as_str())
-			.expect("Could not open config yaml file");
-		let kbct_conf = KbctConf::parse(kbct_conf_yaml)
-			.expect("Could not parse yaml file");
-
-		let kbct = Kbct::new(
-			kbct_conf,
-			|x| match util::keycodes::name_to_code(x) {
-				-1 => None,
-				x => Some(x)
-			}).expect("Could not create kbct instance");
-
-		let file = util::open_readable_uinput_device(&dev_file, true)?;
-		let raw_fd = file.as_raw_fd();
-		let device = util::create_writable_uinput_device(&"KbctCustomisedDevice".to_string())?;
-		let raw_buffer = [0; util::BUF_SIZE];
-
-		let kb_mapper = Box::new(KeyboardMapper {
-			file,
-			device,
-			raw_buffer,
-			kbct,
-			raw_fd,
-		});
-		Ok(kb_mapper)
-	}
-}
-
 impl EventObserver for KeyboardMapper {
 	fn on_event(&mut self, _: &Event) -> Result<ObserverResult> {
 		if let Ok(uinput_events) = util::read_key_events(&mut self.file, &mut self.raw_buffer) {
@@ -119,7 +81,8 @@ impl EventObserver for KeyboardMapper {
 						self.device.write(EV_KEY, x.code, value)?;
 					}
 				} else {
-					self.device.write(ev.kind as i32, ev.code as i32, ev.value)?;
+					self.device
+						.write(ev.kind as i32, ev.code as i32, ev.value)?;
 				}
 			}
 			Ok(ObserverResult::Nothing)
@@ -144,8 +107,8 @@ impl DeviceManager {
 	pub const SYNTHETIC_EV_FILE: &'static str = "__kbct_synthetic_event";
 
 	fn new(conf: KbctRootConf) -> Result<Box<DeviceManager>> {
-		let mut inotify = inotify::Inotify::init()
-			.expect("Error while initializing inotify instance");
+		let mut inotify =
+			inotify::Inotify::init().expect("Error while initializing inotify instance");
 		let raw_fd = inotify.as_raw_fd();
 		let captured_kb_paths = hashset! {};
 
@@ -153,9 +116,15 @@ impl DeviceManager {
 			.add_watch(
 				"/dev/input",
 				inotify::WatchMask::CREATE | inotify::WatchMask::DELETE,
-			).expect("Failed to add file watch on /dev/input/*");
+			)
+			.expect("Failed to add file watch on /dev/input/*");
 
-		Ok(Box::new(DeviceManager { inotify, conf, raw_fd, captured_kb_paths }))
+		Ok(Box::new(DeviceManager {
+			inotify,
+			conf,
+			raw_fd,
+			captured_kb_paths,
+		}))
 	}
 
 	fn force_try_capture_device() {
@@ -170,8 +139,8 @@ impl DeviceManager {
 	fn update_captured_kbs(&mut self) -> Result<Vec<Box<dyn EventObserver>>> {
 		let available_kb_names = util::get_all_uinput_device_names_to_paths()?;
 
-		let available_kb_paths: HashMap<&String, &String> = available_kb_names.iter()
-			.map(|x| (x.1, x.0)).collect();
+		let available_kb_paths: HashMap<&String, &String> =
+			available_kb_names.iter().map(|x| (x.1, x.0)).collect();
 
 		self.captured_kb_paths.retain(|x| {
 			if available_kb_paths.contains_key(x) {
@@ -181,7 +150,6 @@ impl DeviceManager {
 				false
 			}
 		});
-
 
 		let mut ans: Vec<Box<dyn EventObserver>> = vec![];
 
@@ -196,14 +164,21 @@ impl DeviceManager {
 						let raw_buffer: util::KeyBuffer = [0; util::BUF_SIZE];
 						let kbct = Kbct::new(conf.clone(), util::linux_keyname_mapper)?;
 
-						let mapper = Box::new(
-							KeyboardMapper { file, device, raw_buffer, kbct, raw_fd });
+						let mapper = Box::new(KeyboardMapper {
+							file,
+							device,
+							raw_buffer,
+							kbct,
+							raw_fd,
+						});
 
 						ans.push(mapper);
 						self.captured_kb_paths.insert(kb_path.clone());
 
-						info!("Capturing device path={} name={:?} mapped_name={:?}",
-									kb_path, kb_name, kb_new_name)
+						info!(
+							"Capturing device path={} name={:?} mapped_name={:?}",
+							kb_path, kb_name, kb_new_name
+						)
 					}
 				}
 			}
@@ -217,21 +192,25 @@ impl EventObserver for DeviceManager {
 		use inotify::EventMask;
 		let mut buffer = [0; 1024];
 		let regex: Regex = Regex::new("^(event\\d+)|(__kbct_synthetic_event)$")?;
-		let events = self.inotify.read_events_blocking(&mut buffer)
+		let events = self
+			.inotify
+			.read_events_blocking(&mut buffer)
 			.expect("Error while reading events");
 
-		let has_updates =
-			events.into_iter()
-				.find(|event| regex.is_match(event.name.unwrap().to_str().unwrap()) &&
-					!event.mask.contains(EventMask::ISDIR) &&
-					(event.mask.contains(EventMask::CREATE) ||
-						event.mask.contains(EventMask::DELETE)))
-				.is_some();
+		let has_updates = events
+			.into_iter()
+			.find(|event| {
+				regex.is_match(event.name.unwrap().to_str().unwrap())
+					&& !event.mask.contains(EventMask::ISDIR)
+					&& (event.mask.contains(EventMask::CREATE)
+						|| event.mask.contains(EventMask::DELETE))
+			})
+			.is_some();
 
 		if has_updates {
 			Ok(ObserverResult::SubscribeNew(
-				DeviceManager::update_captured_kbs(self)
-					.expect("Could not capture keyboard")))
+				DeviceManager::update_captured_kbs(self).expect("Could not capture keyboard"),
+			))
 		} else {
 			Ok(ObserverResult::Nothing)
 		}
@@ -261,13 +240,20 @@ impl KeyLogger {
 	}
 }
 
-
 impl EventObserver for KeyLogger {
 	fn on_event(&mut self, _: &Event) -> Result<ObserverResult> {
 		if let Ok(events) = util::read_key_events(&mut self.device_file, &mut self.raw_buffer) {
 			for ev in events {
 				if let Some(kbct_event) = util::kbct_from_uinput_event(&ev) {
-					println!("{}", format!("{} {:?}", util::keycodes::code_to_name(kbct_event.code), kbct_event.ev_type).to_lowercase())
+					println!(
+						"{}",
+						format!(
+							"{} {:?}",
+							util::keycodes::code_to_name(kbct_event.code),
+							kbct_event.ev_type
+						)
+						.to_lowercase()
+					)
 				}
 			}
 			Ok(ObserverResult::Nothing)
@@ -281,12 +267,12 @@ impl EventObserver for KeyLogger {
 	}
 }
 
-
 fn start_mapper_from_file_conf(config_file: String) -> Result<()> {
 	let config = KbctRootConf::parse(
 		std::fs::read_to_string(config_file.as_str())
-			.expect(&format!("Could not open file {}", config_file))
-	).expect("Could not parse the configuration yaml file");
+			.expect(&format!("Could not open file {}", config_file)),
+	)
+	.expect("Could not parse the configuration yaml file");
 	start_mapper(config)
 }
 
@@ -325,6 +311,8 @@ fn log_keys(device: String) -> Result<()> {
 struct CliRoot {
 	#[clap(subcommand)]
 	subcmd: SubCommand,
+	#[clap(short, long)]
+	debug_log: bool,
 }
 
 #[derive(Clap)]
@@ -354,17 +342,21 @@ struct CliRemap {
 #[derive(Clap)]
 struct LogKeys {
 	#[clap(short, long)]
-	device_path: String
+	device_path: String,
 }
 
 #[derive(Clap)]
 struct ListDevices {}
 
 fn main() -> Result<()> {
-	pretty_env_logger::formatted_builder()
-		.filter_level(LevelFilter::Info)
-		.init();
 	let root_opts: CliRoot = CliRoot::parse();
+	pretty_env_logger::formatted_builder()
+		.filter_level(if root_opts.debug_log {
+			LevelFilter::Debug
+		} else {
+			LevelFilter::Info
+		})
+		.init();
 	use SubCommand::*;
 	match root_opts.subcmd {
 		TestReplay(args) => {

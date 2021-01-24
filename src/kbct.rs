@@ -1,19 +1,12 @@
-#![allow(unused_imports)]
-#![allow(dead_code)]
 #[macro_use]
 extern crate maplit;
 
-use serde::{Serialize, Deserialize};
-use std::collections::{HashMap, HashSet, BTreeSet};
-use std::error::Error;
-use std::io;
-use std::cmp::Ordering;
-use std::cmp::Ordering::Less;
-use thiserror::Error;
 use linked_hash_map::LinkedHashMap;
-use std::ptr::hash;
-use std::str::Utf8Error;
-use log::{warn, error, info, debug};
+use log::{error, warn};
+use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
+use std::collections::{BTreeSet, HashMap};
+use thiserror::Error;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 struct KbctComplexConf {
@@ -47,10 +40,10 @@ pub enum KbctError {
 	IOError(#[from] std::io::Error),
 
 	#[error("Utf8 Error")]
-	Utf8Error(#[from]std::str::Utf8Error),
+	Utf8Error(#[from] std::str::Utf8Error),
 
 	#[error("Regex Error")]
-	RegexError(#[from]regex::Error),
+	RegexError(#[from] regex::Error),
 
 	#[error("Kbct Error")]
 	Error(String),
@@ -59,7 +52,7 @@ pub enum KbctError {
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct KbctRootConf {
 	pub keyboards: HashMap<String, String>,
-	pub modifications: HashMap<String, KbctConf>
+	pub modifications: HashMap<String, KbctConf>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -80,7 +73,6 @@ impl KbctRootConf {
 	}
 }
 
-
 #[derive(Debug)]
 struct KbctKeyState {
 	time: u64,
@@ -97,7 +89,6 @@ pub struct Kbct {
 	logic_clock: u64,
 }
 
-
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KbctEvent {
 	pub code: Keycode,
@@ -112,7 +103,6 @@ pub enum KbctKeyStatus {
 	Pressed,
 }
 
-
 impl Kbct {
 	pub fn new(conf: KbctConf, key_code: impl Fn(&String) -> Option<i32>) -> Result<Kbct> {
 		let simple = conf.simple.unwrap_or_default();
@@ -122,26 +112,33 @@ impl Kbct {
 		let str_to_code = |k| key_code(k).unwrap();
 		let str_to_code_pair = |(k, v)| (str_to_code(k), str_to_code(v));
 
-		let all_keys = simple.iter()
+		let all_keys = simple
+			.iter()
 			.flat_map(unwrap_kv)
-			.chain(complex.iter()
-				.flat_map(|x| x.modifiers.iter().chain(
-					x.keymap.iter().flat_map(unwrap_kv)
-				)));
+			.chain(complex.iter().flat_map(|x| {
+				x.modifiers
+					.iter()
+					.chain(x.keymap.iter().flat_map(unwrap_kv))
+			}));
 
 		let unknown_keys: BTreeSet<&String> = all_keys.filter(|x| key_code(*x).is_none()).collect();
 		if !unknown_keys.is_empty() {
-			return Err(KbctError::Error(
-				format!("Configuration contains unknown keys: {:?}", unknown_keys)));
+			return Err(KbctError::Error(format!(
+				"Configuration contains unknown keys: {:?}",
+				unknown_keys
+			)));
 		}
 
 		let simple_map: KeyMap = simple.iter().map(str_to_code_pair).collect();
 
-		let complex_map: HashMap<KeySet, KeyMap> = complex.iter()
-			.map(|x| (
-				x.modifiers.iter().map(str_to_code).collect(),
-				x.keymap.iter().map(str_to_code_pair).collect()
-			))
+		let complex_map: HashMap<KeySet, KeyMap> = complex
+			.iter()
+			.map(|x| {
+				(
+					x.modifiers.iter().map(str_to_code).collect(),
+					x.keymap.iter().map(str_to_code_pair).collect(),
+				)
+			})
 			.collect();
 
 		Ok(Kbct {
@@ -153,7 +150,6 @@ impl Kbct {
 		})
 	}
 
-
 	fn get_active_complex_modifiers(&self) -> Option<(&KeySet, &KeyMap)> {
 		let cm = &self.complex_map;
 		let mts = &self.mapped_to_source;
@@ -163,7 +159,8 @@ impl Kbct {
 			s.iter()
 				.map(|x| self.get_last_source_mapping_to(*x).unwrap())
 				.map(|x| stm.get(&x).unwrap().time)
-				.max().unwrap()
+				.max()
+				.unwrap()
 		};
 
 		let latest_keystroke = |l: &&KeySet, r: &&KeySet| -> Ordering {
@@ -174,8 +171,7 @@ impl Kbct {
 			}
 		};
 
-		let all_pressed = |x: &&KeySet| x.iter()
-			.find(|x| mts.get(x).is_none()).is_none();
+		let all_pressed = |x: &&KeySet| x.iter().find(|x| mts.get(x).is_none()).is_none();
 
 		cm.iter()
 			.map(|(k, _v)| k)
@@ -192,17 +188,22 @@ impl Kbct {
 		KbctEvent { code, ev_type }
 	}
 
-
 	fn change_key_state(&mut self, source: Keycode, mapped: Keycode, status: KbctKeyStatus) {
 		let empty_hashet = LinkedHashSet::new();
 
 		if status != KbctKeyStatus::Released {
-			self.mapped_to_source.entry(mapped).or_insert(empty_hashet).insert(source, true);
-			self.source_to_mapped.insert(source, KbctKeyState {
-				time: self.logic_clock,
-				mapped_code: mapped,
-				status,
-			});
+			self.mapped_to_source
+				.entry(mapped)
+				.or_insert(empty_hashet)
+				.insert(source, true);
+			self.source_to_mapped.insert(
+				source,
+				KbctKeyState {
+					time: self.logic_clock,
+					mapped_code: mapped,
+					status,
+				},
+			);
 		} else {
 			let set = self.mapped_to_source.entry(mapped).or_insert(empty_hashet);
 			set.remove(&source);
@@ -215,18 +216,10 @@ impl Kbct {
 		self.logic_clock += 1;
 	}
 
-	fn mark_key_clicked(&mut self, code: Keycode) {
-		self.change_key_state(code, code, KbctKeyStatus::Clicked);
-	}
-
-	fn get_current_complex_mapping(&self, set: &KeySet) -> Option<&KeyMap> {
-		self.complex_map.get(set)
-	}
-
 	fn get_last_source_mapping_to(&self, code: Keycode) -> Option<Keycode> {
 		match self.mapped_to_source.get(&code) {
 			Some(x) => x.iter().map(|x| *x.0).last(),
-			None => None
+			None => None,
 		}
 	}
 
@@ -238,7 +231,8 @@ impl Kbct {
 		let not_mapped = ev.code;
 		let simple_mapped = Kbct::map_key(ev.code, &self.simple_map);
 
-		let (active_modifiers, complex_keymap) = self.get_active_complex_modifiers()
+		let (active_modifiers, complex_keymap) = self
+			.get_active_complex_modifiers()
 			.unwrap_or((&empty_set, &empty_map));
 		let complex_mapped = *complex_keymap.get(&simple_mapped).unwrap_or(&simple_mapped);
 
@@ -251,7 +245,9 @@ impl Kbct {
 				result = active_modifiers
 					.iter()
 					.map(|x| (*x, self.get_last_source_mapping_to(*x).unwrap()))
-					.map(|(target, source)| (target, self.source_to_mapped.get(&source).unwrap().status))
+					.map(|(target, source)| {
+						(target, self.source_to_mapped.get(&source).unwrap().status)
+					})
 					.flat_map(|(target, status)| {
 						let is_complex = complex_mapped != simple_mapped;
 						match (status, is_complex) {
@@ -260,14 +256,18 @@ impl Kbct {
 							(Clicked, false) => None,
 							(ForceReleased, true) => None,
 							(ForceReleased, false) => Some((target, Clicked)),
-							(Released, _) => panic!("")
+							(Released, _) => panic!(""),
 						}
 					})
 					.map(|(target, status)| Kbct::make_ev(target, status))
 					.collect();
 				self.change_key_state(not_mapped, complex_mapped, Clicked);
 				for x in &result {
-					self.change_key_state(self.get_last_source_mapping_to(x.code).unwrap(), x.code, x.ev_type);
+					self.change_key_state(
+						self.get_last_source_mapping_to(x.code).unwrap(),
+						x.code,
+						x.ev_type,
+					);
 				}
 				result.push(Kbct::make_ev(complex_mapped, Clicked));
 			}
@@ -276,10 +276,10 @@ impl Kbct {
 					warn!("WARNING: key press was not recorded, skipping");
 				} else {
 					let prev_mapped_code = prev_state.unwrap().mapped_code;
-					let down_keys = self.mapped_to_source.get(&prev_mapped_code)
-						.map(|x| {
-							x.len()
-						})
+					let down_keys = self
+						.mapped_to_source
+						.get(&prev_mapped_code)
+						.map(|x| x.len())
 						.unwrap_or(0);
 					if down_keys == 1 {
 						result.push(Kbct::make_ev(prev_mapped_code, Released));
@@ -297,13 +297,15 @@ impl Kbct {
 			}
 			(ForceReleased, Pressed) => {}
 			_ => {
-				panic!("Illegal state transition {:?} {:?}", prev_status, ev.ev_type);
+				panic!(
+					"Illegal state transition {:?} {:?}",
+					prev_status, ev.ev_type
+				);
 			}
 		}
 		result
 	}
 }
-
 
 #[cfg(test)]
 mod test;
