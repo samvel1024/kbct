@@ -59,8 +59,6 @@ fn parse_test_case(line: &str, line_number: i32) -> KeyMapEvent {
 
 fn read_keyboard_output(mut device_file: File, receiver: Receiver<ReplayMessage>, sender: Sender<ReplayMessage>) -> Result<()> {
 	use ReplayMessage::*;
-	const MAX_EVENTS: usize = 1024;
-	const BUF_SIZE: usize = mem::size_of::<input_event>() * MAX_EVENTS;
 	const TIMEOUT: u64 = 50;
 
 	let fd = device_file.as_raw_fd();
@@ -69,7 +67,7 @@ fn read_keyboard_output(mut device_file: File, receiver: Receiver<ReplayMessage>
 	let token = Token(0);
 	poll.registry().register(&mut SourceFd(&fd), token, Interest::READABLE).unwrap();
 
-	let mut raw_buffer: [u8; BUF_SIZE] = [0; BUF_SIZE];
+	let mut raw_buffer: KeyBuffer = [0; BUF_SIZE];
 	loop {
 		match receiver.recv().expect("Could not receive") {
 			MappedResult(_) => panic!("Received illegal value"),
@@ -82,14 +80,9 @@ fn read_keyboard_output(mut device_file: File, receiver: Receiver<ReplayMessage>
 						break; // Timeout happened
 					}
 
-					let events_count = device_file.read(&mut raw_buffer)? / mem::size_of::<input_event>();
-					let events = unsafe {
-						mem::transmute::<[u8; BUF_SIZE], [input_event; MAX_EVENTS]>(raw_buffer)
-					};
-					for i in 0..events_count {
-						let x = &events[i];
-						if x.kind == EV_KEY as u16 {
-							answer.push(KeyEvent { keycode: x.code as i32, statuscode: x.value })
+					for ev in read_key_events(&mut device_file, &mut raw_buffer)? {
+						if ev.kind == EV_KEY as u16 {
+							answer.push(KeyEvent { keycode: ev.code as i32, statuscode: ev.value })
 						}
 					}
 				}
