@@ -1,0 +1,10 @@
+keyboards:
+  main: "DummyDevice"
+modifications:
+  main:
+    simple:
+      rightalt: space
+    complex:
+      - modifiers: [ 'space' ]
+        keymap:
+          i: up

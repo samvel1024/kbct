@@ -1,11 +1,12 @@
 #[macro_use]
 extern crate maplit;
 
+use std::cmp::Ordering;
+use std::collections::{BTreeSet, HashMap};
+
 use linked_hash_map::LinkedHashMap;
 use log::{error, warn};
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashMap};
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -152,7 +153,6 @@ impl Kbct {
 
 	fn get_active_complex_modifiers(&self) -> Option<(&KeySet, &KeyMap)> {
 		let cm = &self.complex_map;
-		let mts = &self.mapped_to_source;
 		let stm = &self.source_to_mapped;
 
 		let get_last_pressed_time = |s: &KeySet| -> u64 {
@@ -171,17 +171,13 @@ impl Kbct {
 			}
 		};
 
-		let all_pressed = |x: &&KeySet| x.iter().find(|x| mts.get(x).is_none()).is_none();
+		let all_pressed = |x: &&KeySet| x.iter().find(|x| stm.get(x).is_none()).is_none();
 
 		cm.iter()
 			.map(|(k, _v)| k)
 			.filter(all_pressed)
 			.max_by(latest_keystroke)
 			.map(|x| (x, cm.get(x).unwrap()))
-	}
-
-	fn map_key(k: Keycode, map: &KeyMap) -> Keycode {
-		return *map.get(&k).unwrap_or(&k);
 	}
 
 	fn make_ev(code: Keycode, ev_type: KbctKeyStatus) -> KbctEvent {
@@ -229,12 +225,11 @@ impl Kbct {
 		let empty_set = btreeset!();
 
 		let not_mapped = ev.code;
-		let simple_mapped = Kbct::map_key(ev.code, &self.simple_map);
-
+		let simple_mapped = *self.simple_map.get(&not_mapped).unwrap_or(&not_mapped);
 		let (active_modifiers, complex_keymap) = self
 			.get_active_complex_modifiers()
 			.unwrap_or((&empty_set, &empty_map));
-		let complex_mapped = *complex_keymap.get(&simple_mapped).unwrap_or(&simple_mapped);
+		let complex_mapped = *complex_keymap.get(&not_mapped).unwrap_or(&simple_mapped);
 
 		let prev_state = self.source_to_mapped.get(&not_mapped);
 		let prev_status = prev_state.map(|x| x.status).unwrap_or(Released);
@@ -297,10 +292,7 @@ impl Kbct {
 			}
 			(ForceReleased, Pressed) => {}
 			_ => {
-				panic!(
-					"Illegal state transition {:?} {:?}",
-					prev_status, ev.ev_type
-				);
+				warn!("Illegal state transition {:?} {:?}",prev_status, ev.ev_type);
 			}
 		}
 		result

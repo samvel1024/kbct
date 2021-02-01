@@ -1,7 +1,7 @@
 ########### BUILD TOOL HELPERS #################
 
 function buildloop_run() {
-	clear && cargo build && run_integration_test ./tests/10
+	clear && cargo build && run_integration_test ./tests/12
 }
 
 function buildloop() {

@@ -128,7 +128,7 @@ pub fn read_key_events(file: &mut File, buf: &mut KeyBuffer) -> Result<Vec<input
 	Ok(events[..event_count].to_vec())
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct KeyEvent {
 	pub keycode: i32,
 	pub statuscode: i32,

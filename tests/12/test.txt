@@ -1,0 +1,4 @@
++rightalt -> +space
++i -> +i
+-rightalt -> -space
+-i -> -i
