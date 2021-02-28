@@ -1,19 +1,11 @@
-use crate::*;
 use std::collections::HashMap;
+
 use KbctKeyStatus::*;
 
+use crate::*;
+
 fn key(str: &str) -> i32 {
-	match str {
-		"A" => 1,
-		"B" => 2,
-		"C" => 3,
-		"D" => 4,
-		"1" => 11,
-		"2" => 12,
-		"3" => 13,
-		"4" => 14,
-		_ => -1,
-	}
+	str.as_bytes()[0] as i32
 }
 
 fn create_keymap_func(f: fn(&str) -> i32) -> impl Fn(&String) -> Option<i32> {
@@ -56,11 +48,30 @@ fn create_test_kbct() -> Result<Kbct> {
 	)
 }
 
-struct KbctTestContext<'a> {
-	kbct: &'a mut Kbct,
+struct KbctTestContext {
+	kbct: Kbct,
 }
 
-impl<'a> KbctTestContext<'a> {
+impl KbctTestContext {
+	fn new(
+		simple: HashMap<&str, &str>,
+		complex: HashMap<BTreeSet<&str>, HashMap<&str, &str>>,
+	) -> KbctTestContext {
+		fn name_to_codes(map: HashMap<&str, &str>) -> HashMap<i32, i32> {
+			map.into_iter().map(|(l, r)| (key(l), key(r))).collect()
+		}
+
+		let simple_codes = name_to_codes(simple);
+
+		let complex_codes = complex
+			.into_iter()
+			.map(|(l, r)| (l.into_iter().map(|x| key(x)).collect(), name_to_codes(r)))
+			.collect();
+
+		let kbct = Kbct::new_test(simple_codes, complex_codes);
+		KbctTestContext { kbct }
+	}
+
 	fn run_test(&mut self, s: &str, ev_type: KbctKeyStatus, expected: Vec<(&str, KbctKeyStatus)>) {
 		let exp: Vec<KbctEvent> = expected
 			.iter()
@@ -70,15 +81,15 @@ impl<'a> KbctTestContext<'a> {
 		assert_eq!(exp, result);
 	}
 
-	fn assert_click(&mut self, key: &str, expected: Vec<(&str, KbctKeyStatus)>) {
+	fn click(&mut self, key: &str, expected: Vec<(&str, KbctKeyStatus)>) {
 		self.run_test(key, Clicked, expected);
 	}
 
-	fn assert_pressed(&mut self, key: &str, expected: Vec<(&str, KbctKeyStatus)>) {
+	fn press(&mut self, key: &str, expected: Vec<(&str, KbctKeyStatus)>) {
 		self.run_test(key, Pressed, expected);
 	}
 
-	fn assert_release(&mut self, key: &str, expected: Vec<(&str, KbctKeyStatus)>) {
+	fn release(&mut self, key: &str, expected: Vec<(&str, KbctKeyStatus)>) {
 		self.run_test(key, Released, expected);
 	}
 }
@@ -86,44 +97,106 @@ impl<'a> KbctTestContext<'a> {
 #[test]
 fn test_map_event() -> Result<()> {
 	let mut test = KbctTestContext {
-		kbct: &mut create_test_kbct().unwrap(),
+		kbct: create_test_kbct().unwrap(),
 	};
 
 	// Test single key with click and press
-	test.assert_click("A", vec![("A", Clicked)]);
-	test.assert_pressed("A", vec![("A", Pressed)]);
-	test.assert_pressed("A", vec![("A", Pressed)]);
-	test.assert_release("A", vec![("A", Released)]);
+	test.click("A", vec![("A", Clicked)]);
+	test.press("A", vec![("A", Pressed)]);
+	test.press("A", vec![("A", Pressed)]);
+	test.release("A", vec![("A", Released)]);
 
 	// Test single key with click
-	test.assert_click("B", vec![("B", Clicked)]);
-	test.assert_release("B", vec![("B", Released)]);
+	test.click("B", vec![("B", Clicked)]);
+	test.release("B", vec![("B", Released)]);
 
 	// Test key combo 1
-	test.assert_click("B", vec![("B", Clicked)]);
-	test.assert_click("A", vec![("A", Clicked)]);
-	test.assert_pressed("A", vec![("A", Pressed)]);
-	test.assert_release("B", vec![("B", Released)]);
-	test.assert_release("A", vec![("A", Released)]);
+	test.click("B", vec![("B", Clicked)]);
+	test.click("A", vec![("A", Clicked)]);
+	test.press("A", vec![("A", Pressed)]);
+	test.release("B", vec![("B", Released)]);
+	test.release("A", vec![("A", Released)]);
 
 	// Test simple mapping
-	test.assert_click("A", vec![("A", Clicked)]);
-	test.assert_release("A", vec![("A", Released)]);
-	test.assert_click("3", vec![("2", Clicked)]);
-	test.assert_pressed("3", vec![("2", Pressed)]);
-	test.assert_release("3", vec![("2", Released)]);
+	test.click("A", vec![("A", Clicked)]);
+	test.release("A", vec![("A", Released)]);
+	test.click("3", vec![("2", Clicked)]);
+	test.press("3", vec![("2", Pressed)]);
+	test.release("3", vec![("2", Released)]);
 
 	// Test complex mapping
-	test.assert_click("A", vec![("A", Clicked)]);
-	test.assert_click("1", vec![("A", ForceReleased), ("3", Clicked)]);
-	test.assert_release("1", vec![("3", Released)]);
-	test.assert_click("1", vec![("3", Clicked)]);
-	test.assert_click("3", vec![("A", Clicked), ("2", Clicked)]);
+	test.click("A", vec![("A", Clicked)]);
+	test.click("1", vec![("A", ForceReleased), ("3", Clicked)]);
+	test.release("1", vec![("3", Released)]);
+	test.click("1", vec![("3", Clicked)]);
+	test.click("3", vec![("A", Clicked), ("2", Clicked)]);
 	// test.assert_click("4", vec![("4", Clicked)]);
 	// test.assert_release("A", vec![]);
 	// test.assert_release("1", vec![("3", Released)]);
 
 	Ok(())
+}
+
+#[test]
+fn test_1() {
+	let mut kbct = KbctTestContext::new(
+		hashmap! {"1" => "2", "3" => "4"},
+		hashmap! {
+		btreeset! {"A"} => hashmap!{"1" => "3"},
+		btreeset! {"A", "B"} => hashmap! {"1" => "5"}
+		},
+	);
+
+	kbct.click("A", vec![("A", Clicked)]);
+	kbct.click("1", vec![("A", ForceReleased), ("3", Clicked)]);
+	kbct.release("1", vec![("3", Released)]);
+	kbct.click("B", vec![("A", Clicked), ("B", Clicked)]);
+	kbct.click(
+		"1",
+		vec![("A", ForceReleased), ("B", ForceReleased), ("5", Clicked)],
+	);
+}
+
+#[test]
+fn test_2() {
+	let mut kbct = KbctTestContext::new(
+		hashmap! {"1" => "2", "3" => "4", "A" => "C"},
+		hashmap! {
+		btreeset! {"A"} => hashmap!{"1" => "3"},
+		btreeset! {"A", "B"} => hashmap! {"1" => "5"}
+		},
+	);
+
+	kbct.click("A", vec![("C", Clicked)]);
+	kbct.click("1", vec![("C", ForceReleased), ("3", Clicked)]);
+	kbct.release("1", vec![("3", Released)]);
+	kbct.click("B", vec![("C", Clicked), ("B", Clicked)]);
+	kbct.click(
+		"1",
+		vec![("C", ForceReleased), ("B", ForceReleased), ("5", Clicked)],
+	);
+}
+
+#[test]
+fn test_3() {
+	let mut kbct = KbctTestContext::new(
+		hashmap! {
+		"X" => "Z",
+		"A" => "B",
+		"C" => "K"},
+		hashmap! {
+		btreeset! {"A"} => hashmap!{"X" => "Y"},
+		btreeset! {"A", "C"} => hashmap! {"X" => "T"}},
+	);
+
+	kbct.click("A", vec![("B", Clicked)]);
+	kbct.click("X", vec![("B", ForceReleased), ("Y", Clicked)]);
+	kbct.release("X", vec![("Y", Released)]);
+	kbct.click("C", vec![("B", Clicked), ("K", Clicked)]);
+	kbct.click(
+		"X",
+		vec![("B", ForceReleased), ("K", ForceReleased), ("T", Clicked)],
+	);
 }
 
 #[test]
@@ -172,24 +245,6 @@ fn test_create_kbct_fail() -> Result<()> {
 		Err(KbctError::Error(k)) => assert_eq!(err, k),
 		_ => {}
 	}
-	Ok(())
-}
-
-#[test]
-fn test_create_complex_kbct() -> Result<()> {
-	let kbct = create_test_kbct()?;
-
-	assert_eq!(1, kbct.simple_map.len());
-	assert_eq!(3, kbct.complex_map.len());
-	assert_eq!(
-		hashmap![12 => 11, 11=>12],
-		*kbct.complex_map.get(&btreeset! {1, 2}).unwrap()
-	);
-	assert_eq!(
-		hashmap![11 => 13],
-		*kbct.complex_map.get(&btreeset! {1}).unwrap()
-	);
-
 	Ok(())
 }
 

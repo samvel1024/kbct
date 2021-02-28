@@ -105,6 +105,16 @@ pub enum KbctKeyStatus {
 }
 
 impl Kbct {
+	pub fn new_test(simple_keymap: KeyMap, complex_keymap: ComplexKeyMap) -> Kbct {
+		Kbct {
+			simple_map: simple_keymap,
+			complex_map: complex_keymap,
+			source_to_mapped: Default::default(),
+			mapped_to_source: Default::default(),
+			logic_clock: 0,
+		}
+	}
+
 	pub fn new(conf: KbctConf, key_code: impl Fn(&String) -> Option<i32>) -> Result<Kbct> {
 		let simple = conf.simple.unwrap_or_default();
 		let complex = conf.complex.unwrap_or_default();
@@ -229,6 +239,7 @@ impl Kbct {
 		let (active_modifiers, complex_keymap) = self
 			.get_active_complex_modifiers()
 			.unwrap_or((&empty_set, &empty_map));
+
 		let complex_mapped = *complex_keymap.get(&not_mapped).unwrap_or(&simple_mapped);
 
 		let prev_state = self.source_to_mapped.get(&not_mapped);
@@ -237,33 +248,35 @@ impl Kbct {
 
 		match (prev_status, ev.ev_type) {
 			(Released, Clicked) => {
-				result = active_modifiers
+				let synthetic_modifier_events: Vec<_> = active_modifiers
 					.iter()
-					.map(|x| (*x, self.get_last_source_mapping_to(*x).unwrap()))
-					.map(|(target, source)| {
-						(target, self.source_to_mapped.get(&source).unwrap().status)
-					})
-					.flat_map(|(target, status)| {
+					.flat_map(|modifier_raw| {
+						let modifier_mapped = self.source_to_mapped.get(&modifier_raw).unwrap();
+
 						let is_complex = complex_mapped != simple_mapped;
-						match (status, is_complex) {
-							(Pressed, _) => None,
-							(Clicked, true) => Some((target, ForceReleased)),
-							(Clicked, false) => None,
-							(ForceReleased, true) => None,
-							(ForceReleased, false) => Some((target, Clicked)),
-							(Released, _) => panic!(""),
+
+						match (modifier_mapped.status, is_complex) {
+							(Clicked, true) => {
+								Some((*modifier_raw, modifier_mapped.mapped_code, ForceReleased))
+							}
+							(ForceReleased, false) => {
+								Some((*modifier_raw, modifier_mapped.mapped_code, Clicked))
+							}
+							(Released, _) => panic!("Illegal state"),
+							_ => None,
 						}
 					})
-					.map(|(target, status)| Kbct::make_ev(target, status))
 					.collect();
-				self.change_key_state(not_mapped, complex_mapped, Clicked);
-				for x in &result {
-					self.change_key_state(
-						self.get_last_source_mapping_to(x.code).unwrap(),
-						x.code,
-						x.ev_type,
-					);
+
+				for (source, mapped, status) in synthetic_modifier_events.iter() {
+					self.change_key_state(*source, *mapped, *status)
 				}
+				self.change_key_state(not_mapped, complex_mapped, Clicked);
+
+				result = synthetic_modifier_events
+					.iter()
+					.map(|(_s, target, st)| Kbct::make_ev(*target, *st))
+					.collect();
 				result.push(Kbct::make_ev(complex_mapped, Clicked));
 			}
 			(Clicked, Released) | (Pressed, Released) => {
@@ -292,7 +305,10 @@ impl Kbct {
 			}
 			(ForceReleased, Pressed) => {}
 			_ => {
-				warn!("Illegal state transition {:?} {:?}",prev_status, ev.ev_type);
+				warn!(
+					"Illegal state transition {:?} {:?}",
+					prev_status, ev.ev_type
+				);
 			}
 		}
 		result
