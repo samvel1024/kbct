@@ -1,10 +1,7 @@
-keyboards:
-  main: "DummyDevice"
-modifications:
-  main:
-    simple:
-      1: 2
-    complex:
-      - modifiers: ['a']
-        keymap:
-          2: 3
+- keyboards: ["DummyDevice"]
+  simple:
+    1: 2
+  layers:
+    - modifiers: ['a']
+      keymap:
+        2: 3

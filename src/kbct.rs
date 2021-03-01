@@ -3,6 +3,7 @@ extern crate maplit;
 
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
+use std::slice::Iter;
 
 use linked_hash_map::LinkedHashMap;
 use log::{error, warn};
@@ -15,6 +16,7 @@ struct KbctComplexConf {
 	keymap: HashMap<String, String>,
 }
 
+pub type KbctRootConf = Vec<KbctConf>;
 pub type Result<T> = std::result::Result<T, KbctError>;
 
 type Keycode = i32;
@@ -51,15 +53,16 @@ pub enum KbctError {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-pub struct KbctRootConf {
-	pub keyboards: HashMap<String, String>,
-	pub modifications: HashMap<String, KbctConf>,
+pub struct KbctConf {
+	keyboards: Vec<String>,
+	simple: Option<HashMap<String, String>>,
+	layers: Option<Vec<KbctComplexConf>>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-pub struct KbctConf {
-	simple: Option<HashMap<String, String>>,
-	complex: Option<Vec<KbctComplexConf>>,
+impl KbctConf {
+	pub fn keyboards(&self) -> Iter<'_, String> {
+		return self.keyboards.iter();
+	}
 }
 
 impl KbctConf {
@@ -68,11 +71,6 @@ impl KbctConf {
 	}
 }
 
-impl KbctRootConf {
-	pub fn parse(str: String) -> Result<KbctRootConf> {
-		Ok(serde_yaml::from_str(&str)?)
-	}
-}
 
 #[derive(Debug)]
 struct KbctKeyState {
@@ -117,7 +115,7 @@ impl Kbct {
 
 	pub fn new(conf: KbctConf, key_code: impl Fn(&String) -> Option<i32>) -> Result<Kbct> {
 		let simple = conf.simple.unwrap_or_default();
-		let complex = conf.complex.unwrap_or_default();
+		let complex = conf.layers.unwrap_or_default();
 
 		let unwrap_kv = |(k, v)| vec![k, v];
 		let str_to_code = |k| key_code(k).unwrap();

@@ -1,15 +1,12 @@
-keyboards:
-  main: "DummyDevice"
-modifications:
-  main:
-    simple:
-      x: z
-      a: b
-      c: k
-    complex:
-      - modifiers: [ 'a' ]
-        keymap:
-          x: y
-      - modifiers: ['a', 'c']
-        keymap:
-          x: t
+- keyboards: ["DummyDevice"]
+  simple:
+    x: z
+    a: b
+    c: k
+  layers:
+    - modifiers: [ 'a' ]
+      keymap:
+        x: y
+    - modifiers: ['a', 'c']
+      keymap:
+        x: t

@@ -28,8 +28,9 @@ fn vec_string(mp: Vec<&str>) -> Vec<String> {
 fn create_test_kbct() -> Result<Kbct> {
 	Kbct::new(
 		KbctConf {
+			keyboards: vec![],
 			simple: Some(map_string(hashmap!["3" => "2"])),
-			complex: Some(vec![
+			layers: Some(vec![
 				KbctComplexConf {
 					modifiers: vec_string(vec!["A", "B"]),
 					keymap: map_string(hashmap!["1" => "2", "2" => "1"]),
@@ -224,8 +225,9 @@ fn test_active_mapping() -> Result<()> {
 fn test_create_kbct_fail() -> Result<()> {
 	let kbct = Kbct::new(
 		KbctConf {
+			keyboards: vec![],
 			simple: Some(hashmap!["C".to_string() => "D".to_string()]),
-			complex: Some(vec![
+			layers: Some(vec![
 				KbctComplexConf {
 					modifiers: vec!["A".to_string(), "B".to_string()],
 					keymap: hashmap!["1".to_string() => "2".to_string(), "2".to_string() => "1".to_string()],
@@ -255,8 +257,9 @@ fn test_create_simple_kbct() -> Result<()> {
 	};
 	let kbct = Kbct::new(
 		KbctConf {
+			keyboards: vec![],
 			simple: Some(simple),
-			complex: None,
+			layers: None,
 		},
 		create_keymap_func(|x| match x {
 			"K1" => 1,
@@ -274,25 +277,25 @@ fn test_conf_parser() -> Result<()> {
 	let yml = "simple:";
 	let conf = KbctConf::parse(yml.to_string())?;
 	assert_eq!(None, conf.simple);
-	assert_eq!(None, conf.complex);
+	assert_eq!(None, conf.layers);
 
 	let yml = "ignored_key: 12";
 	let conf = KbctConf::parse(yml.to_string())?;
 	assert_eq!(None, conf.simple);
-	assert_eq!(None, conf.complex);
+	assert_eq!(None, conf.layers);
 
 	let yml = "simple:\n  KEY: VALUE\n";
 	let conf = KbctConf::parse(yml.to_string())?;
 	assert!(conf.simple.is_some());
-	assert_eq!(None, conf.complex);
+	assert_eq!(None, conf.layers);
 	let map = conf.simple.unwrap();
 	assert_eq!("VALUE", map.get("KEY").unwrap());
 	assert_eq!(1, map.len());
 
 	let yml = "complex:\n- modifiers: ['LEFT_ALT']\n  keymap:\n    KEY_I: UP_ARROW";
 	let conf = KbctConf::parse(yml.to_string())?;
-	assert!(conf.complex.is_some());
-	let complex_vec = conf.complex.unwrap();
+	assert!(conf.layers.is_some());
+	let complex_vec = conf.layers.unwrap();
 	let conf = complex_vec.get(0).unwrap();
 	assert_eq!("UP_ARROW", conf.keymap.get("KEY_I").unwrap());
 	assert_eq!(1, conf.keymap.len());

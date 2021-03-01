@@ -1,10 +1,7 @@
-keyboards:
-  main: "DummyDevice"
-modifications:
-  main:
-    simple:
-      rightalt: space
-    complex:
-      - modifiers: [ 'space' ]
-        keymap:
-          i: up
+- keyboards: ["DummyDevice"]
+  simple:
+    rightalt: space
+  layers:
+    - modifiers: [ 'space' ]
+      keymap:
+        i: up

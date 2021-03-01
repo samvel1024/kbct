@@ -7,9 +7,9 @@ extern crate pretty_env_logger;
 extern crate uinput;
 extern crate uinput_sys;
 
+use std::{fs, fs::File, process, thread, time};
 use std::collections::{HashMap, HashSet};
 use std::os::unix::io::{AsRawFd, RawFd};
-use std::{fs, fs::File, process, thread, time};
 
 use clap::Clap;
 use inotify::Inotify;
@@ -41,7 +41,7 @@ impl SignalReceiver {
 			&mask,
 			nix::sys::signalfd::SfdFlags::SFD_NONBLOCK,
 		)
-		.unwrap();
+			.unwrap();
 		let fd = sfd.as_raw_fd();
 		Ok(Box::new(SignalReceiver {
 			signal_fd: (sfd),
@@ -153,8 +153,8 @@ impl DeviceManager {
 
 		let mut ans: Vec<Box<dyn EventObserver>> = vec![];
 
-		for (kb_alias, conf) in self.conf.modifications.iter() {
-			if let Some(kb_name) = self.conf.keyboards.get(kb_alias) {
+		for conf in self.conf.iter() {
+			for kb_name in conf.keyboards() {
 				if let Some(kb_path) = available_kb_names.get(kb_name) {
 					if !self.captured_kb_paths.contains(kb_path) {
 						let kb_new_name = format!("{}-{}", "Kbct", kb_name);
@@ -203,7 +203,7 @@ impl EventObserver for DeviceManager {
 				regex.is_match(event.name.unwrap().to_str().unwrap())
 					&& !event.mask.contains(EventMask::ISDIR)
 					&& (event.mask.contains(EventMask::CREATE)
-						|| event.mask.contains(EventMask::DELETE))
+					|| event.mask.contains(EventMask::DELETE))
 			})
 			.is_some();
 
@@ -252,7 +252,7 @@ impl EventObserver for KeyLogger {
 							util::keycodes::code_to_name(kbct_event.code),
 							kbct_event.ev_type
 						)
-						.to_lowercase()
+							.to_lowercase()
 					)
 				}
 			}
@@ -268,11 +268,10 @@ impl EventObserver for KeyLogger {
 }
 
 fn start_mapper_from_file_conf(config_file: String) -> Result<()> {
-	let config = KbctRootConf::parse(
-		std::fs::read_to_string(config_file.as_str())
-			.expect(&format!("Could not open file {}", config_file)),
-	)
-	.expect("Could not parse the configuration yaml file");
+	let config = serde_yaml::from_str(
+		&*std::fs::read_to_string(config_file.as_str())
+			.expect(&format!("Could not open file {}", config_file)))
+		.expect("Could not parse the configuration yaml file");
 	start_mapper(config)
 }
 
