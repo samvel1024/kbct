@@ -1,5 +1,5 @@
 - keyboards: ["DummyDevice"]
-  simple:
+  keymap:
     rightalt: space
   layers:
     - modifiers: [ 'space' ]

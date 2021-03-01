@@ -29,7 +29,7 @@ fn create_test_kbct() -> Result<Kbct> {
 	Kbct::new(
 		KbctConf {
 			keyboards: vec![],
-			simple: Some(map_string(hashmap!["3" => "2"])),
+			keymap: Some(map_string(hashmap!["3" => "2"])),
 			layers: Some(vec![
 				KbctComplexConf {
 					modifiers: vec_string(vec!["A", "B"]),
@@ -226,7 +226,7 @@ fn test_create_kbct_fail() -> Result<()> {
 	let kbct = Kbct::new(
 		KbctConf {
 			keyboards: vec![],
-			simple: Some(hashmap!["C".to_string() => "D".to_string()]),
+			keymap: Some(hashmap!["C".to_string() => "D".to_string()]),
 			layers: Some(vec![
 				KbctComplexConf {
 					modifiers: vec!["A".to_string(), "B".to_string()],
@@ -258,7 +258,7 @@ fn test_create_simple_kbct() -> Result<()> {
 	let kbct = Kbct::new(
 		KbctConf {
 			keyboards: vec![],
-			simple: Some(simple),
+			keymap: Some(simple),
 			layers: None,
 		},
 		create_keymap_func(|x| match x {
@@ -274,25 +274,25 @@ fn test_create_simple_kbct() -> Result<()> {
 
 #[test]
 fn test_conf_parser() -> Result<()> {
-	let yml = "simple:";
+	let yml = "keyboards: []\nkeymap:";
 	let conf = KbctConf::parse(yml.to_string())?;
-	assert_eq!(None, conf.simple);
+	assert_eq!(None, conf.keymap);
 	assert_eq!(None, conf.layers);
 
-	let yml = "ignored_key: 12";
+	let yml = "keyboards: []\nignored_key: 12";
 	let conf = KbctConf::parse(yml.to_string())?;
-	assert_eq!(None, conf.simple);
+	assert_eq!(None, conf.keymap);
 	assert_eq!(None, conf.layers);
 
-	let yml = "simple:\n  KEY: VALUE\n";
+	let yml = "keyboards: []\nkeymap:\n  KEY: VALUE\n";
 	let conf = KbctConf::parse(yml.to_string())?;
-	assert!(conf.simple.is_some());
+	assert!(conf.keymap.is_some());
 	assert_eq!(None, conf.layers);
-	let map = conf.simple.unwrap();
+	let map = conf.keymap.unwrap();
 	assert_eq!("VALUE", map.get("KEY").unwrap());
 	assert_eq!(1, map.len());
 
-	let yml = "complex:\n- modifiers: ['LEFT_ALT']\n  keymap:\n    KEY_I: UP_ARROW";
+	let yml = "keyboards: []\nlayers:\n- modifiers: ['LEFT_ALT']\n  keymap:\n    KEY_I: UP_ARROW";
 	let conf = KbctConf::parse(yml.to_string())?;
 	assert!(conf.layers.is_some());
 	let complex_vec = conf.layers.unwrap();
@@ -302,11 +302,11 @@ fn test_conf_parser() -> Result<()> {
 	assert_eq!(1, conf.modifiers.len());
 	assert_eq!("LEFT_ALT", conf.modifiers.first().unwrap());
 
-	let yml = "complex:\n  modifiers: ['LEFT_ALT']";
+	let yml = "keyboards: []\nlayers:\n  modifiers: ['LEFT_ALT']";
 	let conf = KbctConf::parse(yml.to_string());
 	assert!(conf.is_err());
 
-	let yml = "complex:\n  keymap:\n    KEY_I: UP_ARROW";
+	let yml = "keyboards: []\nlayers:\n  keymap:\n    KEY_I: UP_ARROW";
 	let conf = KbctConf::parse(yml.to_string());
 	assert!(conf.is_err());
 

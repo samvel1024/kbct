@@ -1,5 +1,5 @@
 - keyboards: ["DummyDevice"]
-  simple:
+  keymap:
     x: z
     a: b
     c: k

@@ -55,7 +55,7 @@ pub enum KbctError {
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct KbctConf {
 	keyboards: Vec<String>,
-	simple: Option<HashMap<String, String>>,
+	keymap: Option<HashMap<String, String>>,
 	layers: Option<Vec<KbctComplexConf>>,
 }
 
@@ -114,7 +114,7 @@ impl Kbct {
 	}
 
 	pub fn new(conf: KbctConf, key_code: impl Fn(&String) -> Option<i32>) -> Result<Kbct> {
-		let simple = conf.simple.unwrap_or_default();
+		let simple = conf.keymap.unwrap_or_default();
 		let complex = conf.layers.unwrap_or_default();
 
 		let unwrap_kv = |(k, v)| vec![k, v];
