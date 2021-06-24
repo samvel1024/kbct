@@ -330,6 +330,8 @@ enum SubCommand {
 struct CliTestReplay {
 	#[clap(short, long)]
 	testcase: String,
+	#[clap(short, long, default_value="DummyDevice")]
+	device_name: String
 }
 
 #[derive(Clap)]
@@ -359,7 +361,7 @@ fn main() -> Result<()> {
 	use SubCommand::*;
 	match root_opts.subcmd {
 		TestReplay(args) => {
-			util::integration_test::replay(args.testcase)?;
+			util::integration_test::replay(args.testcase, args.device_name)?;
 		}
 		Remap(args) => {
 			start_mapper_from_file_conf(args.config)?;

@@ -111,17 +111,16 @@ fn read_keyboard_output(
 	Ok(())
 }
 
-pub fn replay(test_file: String) -> Result<()> {
+pub fn replay(test_file: String, device_name: String) -> Result<()> {
 	use ReplayMessage::*;
 
-	let device_name = "DummyDevice".to_string();
 	let mut device = create_writable_uinput_device(&device_name)?;
 
 	// Allow some time for the kbct process to capture the new device
 	thread::sleep(time::Duration::from_millis(800));
 
 	let all_devices = get_all_uinput_device_names_to_paths()?;
-	let mapped_device_path = all_devices.get("Kbct-DummyDevice").expect(
+	let mapped_device_path = all_devices.get(&*format!("Kbct-{}", device_name)).expect(
 		"The mapped device is not mounted yet, make sure you run kbct in parallel before replay",
 	);
 	let mapped_device_file = open_readable_uinput_device(mapped_device_path, true)?;
