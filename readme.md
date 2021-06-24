@@ -12,9 +12,9 @@ When is KBCT useful?
 
 - If you're an ex MacOS user and want something similar to [Karabiner Elements](https://github.com/pqrs-org/Karabiner-Elements).
 
-- If you want to achieve something similar to QMK layers on your laptop keyboard.
+- If you want to achieve something similar to **QMK layers on your laptop keyboard**.
 
-- If you want to have system-wide vim-like navigation mapping `some_modifier + hjkl` to arrow keys.
+- If you want to have system-wide **vim-like navigation** mapping `some_modifier + hjkl` to arrow keys.
 
 - If you find `xbindkeys` ,`xmodmap` and `setxkbmap` ~~impossible~~ hard to configure.
 
