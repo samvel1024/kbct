@@ -1,0 +1,5 @@
+- keyboards: ["DummyDevice"]
+  layers:
+    - modifiers: [ 'leftmeta' ]
+      keymap:
+        x: y

@@ -1,0 +1,3 @@
+- keyboards: [ "DummyDevice" ]
+  keymap:
+    1: 2
