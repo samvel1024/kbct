@@ -1,18 +1,18 @@
 ## 
 
-## WORK IN PROGRESS
-
 ## KBCT - Keyboard Customization Tool for Linux :gear: :computer: :penguin:
 
-![img](https://i.imgur.com/n5Wn0YJ.jpg)
+![img](https://i.imgur.com/ryVuxe5.jpeg)
 
 KBCT is yet another tool that will help to remap keys across the desktop environment.
 
-When is kbct useful?
+When is KBCT useful?
 
-- If you want to have an **ergonomic keyboard layout** (when your fingers almost never need to leave the home row keys).
+- If you want to have a custom **ergonomic keyboard layout** (when your fingers almost never need to leave the home row keys).
 
 - If you're an ex MacOS user and want something similar to [Karabiner Elements](https://github.com/pqrs-org/Karabiner-Elements).
+
+- If you want to achieve something similar to QMK layers on your laptop keyboard.
 
 - If you want to have system-wide vim-like navigation mapping `some_modifier + hjkl` to arrow keys.
 
@@ -22,23 +22,34 @@ When is kbct useful?
 
 - If you want the configuration to be simple and intuitive.
 
-***However, Kbct is not** a tool that can be used to configure macros or arbitrary command execution on a key press. Also note that **kbct requires sudo access**.
+***However, KBCT is not** a tool that can be used to configure macros or arbitrary command execution on a key press. Also note that **KBCT requires sudo access**.
+
+****KBCT is in active development** so expect to see some bugs, however it should be stable enough for simple use cases. In any case create an issue if you encounter something unexpected.
 
 ### 
 
 ### Installation
 
-There are two options for installing kbct
+There are two options for installing KBCT
 
 - Download the pre-built x86_64 AppImage binary from [releases](https://github.com/samvel1024/kbct/releases).
+  
+  ```bash
+  cd ~/Downloads
+  wget https://github.com/samvel1024/kbct/releases/latest/download/kbct-x86_64.AppImage
+  chmod +x kbct-x86_64.AppImage
+  
+  #Check that it works
+  sudo ./kbct-x86_64.AppImage list-devices
+  ```
 
 - Compile from the sources by first installing `libudev1` package (available for all known distributions).
   
   ```
-  sudo apt install libudev1
+  sudo apt install libudev1 # for ubuntu/debian
   ```
   
-  Then assuming that you have a [Rust toolchain](https://www.rust-lang.org/tools/install) in place run the following.
+  Then assuming that you have a [Rust toolchain](https://www.rust-lang.org/tools/install) installed run the following.
   
   ```bash
   cd /tmp && 
@@ -52,26 +63,24 @@ There are two options for installing kbct
 
 ### Configuration
 
-Kbct uses yaml files as configuration. It allows to apply different mapping rules for different keyboards. There are two main types of key mappings
+KBCT uses yaml files as configuration. It allows to apply different mapping rules for different keyboards. There are two main types of key mappings
 
-- `simple`: maps keys 1-1 regardless of any modifiers. (e.g `capslock -> leftctrl`)
+- `keymap`: maps keys 1-1 regardless of any  layer modifiers. (e.g `capslock -> leftctrl`)
 
-- `complex`: maps keys based on the active layer. Layer is a key map that will activate and override the existing mapping if a given set of keys are pressed. Much like `fn` key is combined with `F1-F12` keys. (e.g `rightalt+i=up` or `rightalt+leftctrl+comma=volumeup` )
+- `layers`: maps keys based on the active layer. Layer is a key map that will activate and override the existing mapping if a given set of keys are pressed. Much like `fn` key is combined with `F1-F12` keys. (e.g `rightalt+i=up` or `rightalt+leftctrl+comma=volumeup` )
 
-**The following is an exhaustive example configuration of kbct**
+**The following is an exhaustive example configuration of KBCT**
 
 ```yaml
-# Declares set of mapping rules named "main"
-main: 
-  # A regex selecting the keyboards that need to be mapped 
-  keyboard: "(Thinkpad.*|AT Translated Set 2 keyboard)"
-  # Specifiy one-to-one key mappings
-  simple:
+# Apply this configuratoin to two keyboards (if connected)
+- keyboards: [ "Lenovo TrackPoint Keyboard II", "AT Translated Set 2 keyboard"]
+
+  keymap:
     leftalt: leftctrl
     capslock: leftalt
     sysrq: rightmeta
   # Specify layered configurations (much similar to fn+F keys)
-  complex:
+  layers:
     # Specify the modifiers of the layer
     - modifiers: ['rightalt']
       keymap:
@@ -85,7 +94,30 @@ main:
         semicolon: end
 ```
 
-[Here](https://github.com/samvel1024/kbct/blob/master/Cargo.lock) you can find all the available key names to use in the configuration. Essentially those are taken from Linux API [headers](https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h).
+As a result the above configuration will have the following effect
+
+```textile
+# ↓/↑ stand for press/release events
+# One to one example
+leftalt↓ ⟶ leftctrl↓
+leftalt↑ ⟶ leftctrl↑
+
+# Layer example
+rightalt↓ ⟶ rightalt↓
+i↓ ⟶ rightalt↑ up↓
+i↑ ⟶ up↑
+rightalt↑ ⟶ ∅
+
+
+```
+
+To start kbct based on yaml configuration file run
+
+```bash
+sudo kbct remap --config ~/.config/kbct.yaml 
+```
+
+[Here](https://gist.githubusercontent.com/samvel1024/02e5675e04f9d84f098e98bcd0e1ea12/raw/e18d950ce571b4ff5c832cc06406e9a6afece132/keynames.txt) you can find all the available key names to use in the configuration. Essentially those are taken from Linux API [headers](https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h).
 
 In order to list all the available keyboard devices and their respective names run the following.
 
@@ -93,30 +125,16 @@ In order to list all the available keyboard devices and their respective names r
 sudo kbct list-devices
 ```
 
-You can use those names to create a regex matcher for the `keyboard` field in the configuration
+Most often a keyboard laptop will be named `AT Translated Set 2 keyboard`. If you're not sure what the name of your keyboard is, use the `evtest` utility to find out.
 
-**Important note:** kbct is treating `leftshift`/`rightshift` , `leftalt`/`rightalt`, etc. as different keys, so if you want to map both you need to define the mapping twice. This is done to avoid 
+
+
+**Important note:** KBCT is treating `leftshift`/`rightshift` , `leftalt`/`rightalt`, etc. as different keys, so if you want to map both you need to define the mapping twice. This is done on purpose to give fine grained control over configuration.
 
 ### How it works
 
 KBCT is operating on a low enough level to be independent from the window manager or the desktop environment. It is achieved by the following steps
 
-Since kbct should be run as root it has enough privileges to  read and grab the output of the keyboard (e.g the output of `/dev/input/event2`). Which means that it becomes readable only for kbct and the display manager is no longer able to read from the keyboard device.
+Since KBCT should be run as root it has enough privileges to  read and grab the output of the keyboard (e.g the output of `/dev/input/event2`). Which means that it becomes readable only for KBCT and the display manager is no longer able to read from the keyboard device.
 
-Then kbct creates another "virtual" `uinput`device (e.g. `/dev/input/event6`), and sends customized key events to that device. The new mapped keyboard is successfully read by the window manager, which as a result reads from customized output.
-
-You can use `evtest` to monitor the output of the kbct-mapped virtual device by this command.
-
-```bash
-sudo kbct list-devices | grep -i kbct | awk '{ print $1 }' | sudo xargs evtest 
-```
-
-
-
-
-
-
-
-
-
-
+Then KBCT creates another virtual `uinput`device (e.g. `/dev/input/event6`), and sends customized key events to that device. The new mapped keyboard is successfully read by the window manager, which as a result reads customized key events.
