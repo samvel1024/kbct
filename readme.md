@@ -117,7 +117,7 @@ To start kbct based on yaml configuration file run
 sudo kbct remap --config ~/.config/kbct.yaml 
 ```
 
-[Here](https://gist.githubusercontent.com/samvel1024/02e5675e04f9d84f098e98bcd0e1ea12/raw/e18d950ce571b4ff5c832cc06406e9a6afece132/keynames.txt) you can find all the available key names to use in the configuration. Essentially those are taken from Linux API [headers](https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h).
+[Here](https://gist.githubusercontent.com/samvel1024/02e5675e04f9d84f098e98bcd0e1ea12/raw/e18d950ce571b4ff5c832cc06406e9a6afece132/keynames.txt) you can find all the available key names to use in the configuration. Essentially those are taken from Linux API [headers](https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h). In case you want to disable a key map it to `reserved`. For example disabling capslock will look like this `capslock: reserved`.
 
 In order to list all the available keyboard devices and their respective names run the following.
 
