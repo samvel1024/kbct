@@ -138,3 +138,8 @@ KBCT is operating on a low enough level to be independent from the window manage
 Since KBCT should be run as root it has enough privileges to  read and grab the output of the keyboard (e.g the output of `/dev/input/event2`). Which means that it becomes readable only for KBCT and the display manager is no longer able to read from the keyboard device.
 
 Then KBCT creates another virtual `uinput`device (e.g. `/dev/input/event6`), and sends customized key events to that device. The new mapped keyboard is successfully read by the window manager, which as a result reads customized key events.
+
+
+### Examples
+
+See the [examples.md](./examples.md) for user-submitted kbct remap examples.
