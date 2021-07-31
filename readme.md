@@ -30,33 +30,51 @@ When is KBCT useful?
 
 ### Installation
 
-There are two options for installing KBCT
+There are several ways of installing KBCT
 
 - Download the pre-built x86_64 AppImage binary from [releases](https://github.com/samvel1024/kbct/releases).
-  
+
   ```bash
   cd ~/Downloads
   wget https://github.com/samvel1024/kbct/releases/latest/download/kbct-x86_64.AppImage
   chmod +x kbct-x86_64.AppImage
-  
+
   #Check that it works
   sudo ./kbct-x86_64.AppImage list-devices
   ```
 
 - Compile from the sources by first installing `libudev1` package (available for all known distributions).
-  
+
   ```
   sudo apt install libudev1 # for ubuntu/debian
   ```
-  
+
   Then assuming that you have a [Rust toolchain](https://www.rust-lang.org/tools/install) installed run the following.
-  
+
   ```bash
-  cd /tmp && 
+  cd /tmp &&
   git clone https://github.com/samvel1024/kbct && \
   cd kbct && \
   cargo build --release && \
   ./target/release/kbct --help
+  ```
+
+- Install from the AUR
+
+  If you are an Arch Linux user, you can install it from
+  [AUR](https://aur.archlinux.org/):
+
+  ```
+  $ yay -S kbct-git
+  ```
+
+  > Note: The configuration file is expected to be in
+  > `/etc/kbct/config.yml`.
+
+  After the installation, run the systemd service:
+
+  ```
+  $ systemctl start kbct
   ```
 
 ### 
