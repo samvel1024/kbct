@@ -208,9 +208,9 @@ impl EventObserver for DeviceManager {
 			.is_some();
 
 		if has_updates {
-			Ok(ObserverResult::SubscribeNew(
-				DeviceManager::update_captured_kbs(self).expect("Could not capture keyboard"),
-			))
+			DeviceManager::update_captured_kbs(self)
+				.map(|observer| ObserverResult::SubscribeNew(observer))
+				.or(Ok(ObserverResult::Nothing))
 		} else {
 			Ok(ObserverResult::Nothing)
 		}
