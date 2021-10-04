@@ -43,10 +43,11 @@ There are several ways of installing KBCT
   sudo ./kbct-x86_64.AppImage list-devices
   ```
 
-- Compile from the sources by first installing `libudev1` package (available for all known distributions).
+- Compile from the sources by first installing `libudev1` and `libudev-dev` packages (available for all known distributions).
 
   ```
-  sudo apt install libudev1 # for ubuntu/debian
+  sudo apt install libudev1 && \
+	sudo apt install libudev-dev  # for ubuntu/debian
   ```
 
   Then assuming that you have a [Rust toolchain](https://www.rust-lang.org/tools/install) installed run the following.
