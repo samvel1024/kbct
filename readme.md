@@ -82,7 +82,7 @@ There are several ways of installing KBCT
 
 ### Configuration
 
-KBCT uses yaml files as configuration. It allows to apply different mapping rules for different keyboards. There are two main types of key mappings
+KBCT uses YAML files as configuration. It allows to apply different mapping rules for different keyboards. There are two main types of key mappings
 
 - `keymap`: maps keys 1-1 regardless of any  layer modifiers. (e.g `capslock -> leftctrl`)
 
@@ -126,11 +126,9 @@ rightalt↓ ⟶ rightalt↓
 i↓ ⟶ rightalt↑ up↓
 i↑ ⟶ up↑
 rightalt↑ ⟶ ∅
-
-
 ```
 
-To start kbct based on yaml configuration file run
+To start KBCT based on YAML configuration file run:
 
 ```bash
 sudo kbct remap --config ~/.config/kbct.yaml 
@@ -138,17 +136,28 @@ sudo kbct remap --config ~/.config/kbct.yaml
 
 [Here](https://gist.githubusercontent.com/samvel1024/02e5675e04f9d84f098e98bcd0e1ea12/raw/e18d950ce571b4ff5c832cc06406e9a6afece132/keynames.txt) you can find all the available key names to use in the configuration. Essentially those are taken from Linux API [headers](https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h). In case you want to disable a key map it to `reserved`. For example disabling capslock will look like this `capslock: reserved`.
 
-In order to list all the available keyboard devices and their respective names run the following.
+
+
+**Important note:** KBCT is treating `leftshift`/`rightshift` , `leftalt`/`rightalt`, etc. as different keys, so if you want to map both you need to define the mapping twice. This is done on purpose to give fine grained control over configuration.
+
+### Troubleshooting
+** What is the name of my keyboard? **
+In order to list all the available keyboard devices and their respective names run the following:
 
 ```bash
 sudo kbct list-devices
 ```
 
-Most often a keyboard laptop will be named `AT Translated Set 2 keyboard`. If you're not sure what the name of your keyboard is, use the `evtest` utility to find out.
+Most often a keyboard laptop will be named `AT Translated Set 2 keyboard`. If you're not sure what the name of your keyboard is, run `sudo evtest`, select a device from a list and try typing. If it lets you type without spitting output, you selected a wrong device. Repeat until you see output like this:
+```
+Event: time 1641154916.130391, -------------- SYN_REPORT ------------
+Event: time 1641154916.130391, type 4 (EV_MSC), code 4 (MSC_SCAN), value 7004f
+Event: time 1641154916.130391, type 1 (EV_KEY), code 106 (KEY_RIGHT), value 0
+Event: time 1641154916.130391, -------------- SYN_REPORT ------------
+```
 
-
-
-**Important note:** KBCT is treating `leftshift`/`rightshift` , `leftalt`/`rightalt`, etc. as different keys, so if you want to map both you need to define the mapping twice. This is done on purpose to give fine grained control over configuration.
+** What are the names of the keys? **
+KBCT uses the lowest possible level keycodes from the Linux kernel to perform remapping. Window managers/desktop environments may have other namings for the same keys for various reasons. To know the exact name of the key you're interested you can use either `sudo evtest /dev/input/eventXX`, or `sudo kbct log-keys --device-path /dev/input/eventXX`` where XX should be replaced by the appropriate device path. Then just type.
 
 ### How it works
 
