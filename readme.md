@@ -30,9 +30,9 @@ When is KBCT useful?
 
 ### Installation
 
-There are several ways of installing KBCT
+There are several ways of installing KBCT:
 
-- Download the pre-built x86_64 AppImage binary from [releases](https://github.com/samvel1024/kbct/releases).
+- Download the pre-built x86_64 AppImage binary from [releases](https://github.com/samvel1024/kbct/releases):
 
   ```bash
   cd ~/Downloads
@@ -43,14 +43,14 @@ There are several ways of installing KBCT
   sudo ./kbct-x86_64.AppImage list-devices
   ```
 
-- Compile from the sources by first installing `libudev1` and `libudev-dev` packages (available for all known distributions).
+- Compile from the sources by first installing `libudev1` and `libudev-dev` packages (available for all known distributions):
 
   ```
   sudo apt install libudev1 && \
 	sudo apt install libudev-dev  # for ubuntu/debian
   ```
 
-  Then assuming that you have a [Rust toolchain](https://www.rust-lang.org/tools/install) installed run the following.
+  Then assuming that you have a [Rust toolchain](https://www.rust-lang.org/tools/install) installed run the following:
 
   ```bash
   cd /tmp &&
@@ -60,7 +60,7 @@ There are several ways of installing KBCT
   ./target/release/kbct --help
   ```
 
-- Install from the AUR
+- Install from the AUR:
 
   If you are an Arch Linux user, you can install it from
   [AUR](https://aur.archlinux.org/):
@@ -72,11 +72,37 @@ There are several ways of installing KBCT
   > Note: The configuration file is expected to be in
   > `/etc/kbct/config.yml`.
 
-  After the installation, run the systemd service:
+### Automatic startup
+On Arch Linux, systemd service file is installed automatically. On other distributions, put this into `/etc/systemd/system/kbct.service`:
+	
+```
+[Unit]
+Description=Keyboard keycode mapping daemon supporting layered configuration
 
-  ```
-  $ systemctl start kbct
-  ```
+[Service]
+Type=simple
+ExecStart=PATH_TO_EXECUTABLE remap --config PATH_TO_CONFIG
+Restart=always
+
+[Install]
+WantedBy=default.target
+```
+
+Do not forget to replace PATH_TO_EXECUTABLE and PATH_TO_CONFIG as needed. Then run: 
+
+```bash
+$ systemctl daemon-reload
+```
+
+
+```bash
+$ systemctl start kbct
+```
+
+To make it run on boot automatically, run:
+```bash
+$ systemctl enable kbct
+```
 
 ### 
 
@@ -145,7 +171,7 @@ sudo kbct remap --config ~/.config/kbct.yaml
 In order to list all the available keyboard devices and their respective names run the following:
 
 ```bash
-sudo kbct list-devices
+$ sudo kbct list-devices
 ```
 
 Most often a keyboard laptop will be named `AT Translated Set 2 keyboard`. If you're not sure what the name of your keyboard is, run `sudo evtest`, select a device from a list and try typing. If it lets you type without spitting output, you selected a wrong device. Repeat until you see output like this:
