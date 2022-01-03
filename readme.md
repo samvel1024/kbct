@@ -91,7 +91,7 @@ KBCT uses YAML files as configuration. It allows to apply different mapping rule
 **The following is an exhaustive example configuration of KBCT**
 
 ```yaml
-# Apply this configuratoin to two keyboards (if connected)
+# Apply this configuration to two keyboards (if connected)
 - keyboards: [ "Lenovo TrackPoint Keyboard II", "AT Translated Set 2 keyboard"]
 
   keymap:
