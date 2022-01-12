@@ -20,6 +20,8 @@ When is KBCT useful?
 
 - If you want your mapping configuration to work on **both Wayland and X11**.
 
+- If you want to remap buttons on your **mouse**.
+
 - If you want the configuration to be simple and intuitive.
 
 ***However, KBCT is not** a tool that can be used to configure macros or arbitrary command execution on a key press. Also note that **KBCT requires sudo access**.
@@ -163,9 +165,9 @@ KBCT uses the lowest possible level keycodes from the Linux kernel to perform re
 
 KBCT is operating on a low enough level to be independent from the window manager or the desktop environment. It is achieved by the following steps
 
-Since KBCT should be run as root it has enough privileges to  read and grab the output of the keyboard (e.g the output of `/dev/input/event2`). Which means that it becomes readable only for KBCT and the display manager is no longer able to read from the keyboard device.
+Since KBCT should be run as root, it has enough privileges to  read and grab the output of a keyboard or a mouse (e.g the output of `/dev/input/event2`). Which means that it becomes readable only for KBCT and that the display manager is no longer able to read from the keyboard or mouse device.
 
-Then KBCT creates another virtual `uinput`device (e.g. `/dev/input/event6`), and sends customized key events to that device. The new mapped keyboard is successfully read by the window manager, which as a result reads customized key events.
+Then KBCT creates another virtual `uinput`device (e.g. `/dev/input/event6`), and sends customized key events to that device. The new mapped keyboard or mouse is successfully read by the window manager, which as a result reads customized key events.
 
 
 ### Examples
