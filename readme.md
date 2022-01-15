@@ -141,7 +141,7 @@ sudo kbct remap --config ~/.config/kbct.yaml
 **Important note:** KBCT is treating `leftshift`/`rightshift` , `leftalt`/`rightalt`, etc. as different keys, so if you want to map both you need to define the mapping twice. This is done on purpose to give fine grained control over configuration.
 
 ### Troubleshooting
-** What is the name of my keyboard? **
+**What is the name of my keyboard?**
 In order to list all the available keyboard devices and their respective names run the following:
 
 ```bash
@@ -156,7 +156,7 @@ Event: time 1641154916.130391, type 1 (EV_KEY), code 106 (KEY_RIGHT), value 0
 Event: time 1641154916.130391, -------------- SYN_REPORT ------------
 ```
 
-** What are the names of the keys? **
+**What are the names of the keys?**
 KBCT uses the lowest possible level keycodes from the Linux kernel to perform remapping. Window managers/desktop environments may have other namings for the same keys for various reasons. To know the exact name of the key you're interested you can use either `sudo evtest /dev/input/eventXX`, or `sudo kbct log-keys --device-path /dev/input/eventXX`` where XX should be replaced by the appropriate device path. Then just type.
 
 ### How it works
