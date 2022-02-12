@@ -74,7 +74,7 @@ There are several ways of installing KBCT
   > Note: The configuration file is expected to be in
   > `/etc/kbct/config.yml`.
 
-  After the installation, run the systemd service:
+  After the installation, run the systemd service (remember to `modprobe uinput` first):
 
   ```
   $ systemctl start kbct
