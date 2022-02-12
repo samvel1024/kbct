@@ -130,6 +130,12 @@ i↑ ⟶ up↑
 rightalt↑ ⟶ ∅
 ```
 
+Load uinput module (**kbct will not function but will not produce an error if the uinput module is not loaded**)
+
+```bash
+sudo modprobe uinput
+```
+
 To start KBCT based on YAML configuration file run:
 
 ```bash
