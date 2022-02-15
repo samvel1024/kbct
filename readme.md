@@ -74,7 +74,7 @@ There are several ways of installing KBCT
   > Note: The configuration file is expected to be in
   > `/etc/kbct/config.yml`.
 
-  After the installation, run the systemd service:
+  After the installation, run the systemd service (remember to `modprobe uinput` first):
 
   ```
   $ systemctl start kbct
@@ -128,6 +128,12 @@ rightalt↓ ⟶ rightalt↓
 i↓ ⟶ rightalt↑ up↓
 i↑ ⟶ up↑
 rightalt↑ ⟶ ∅
+```
+
+Load uinput module (**kbct will not function but will not produce an error if the uinput module is not loaded**)
+
+```bash
+sudo modprobe uinput
 ```
 
 To start KBCT based on YAML configuration file run:
