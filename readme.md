@@ -20,6 +20,8 @@ When is KBCT useful?
 
 - If you want your mapping configuration to work on **both Wayland and X11**.
 
+- If you want to remap buttons on your **mouse** or other input devices.
+
 - If you want the configuration to be simple and intuitive.
 
 ***However, KBCT is not** a tool that can be used to configure macros or arbitrary command execution on a key press. Also note that **KBCT requires sudo access**.
@@ -72,6 +74,7 @@ There are several ways of installing KBCT:
   > Note: The configuration file is expected to be in
   > `/etc/kbct/config.yml`.
 
+
 ### Automatic startup
 On Arch Linux, systemd service file is installed automatically. On other distributions, put this into `/etc/systemd/system/kbct.service`:
 	
@@ -93,7 +96,6 @@ Do not forget to replace PATH_TO_EXECUTABLE and PATH_TO_CONFIG as needed. Then r
 ```bash
 $ systemctl daemon-reload
 ```
-
 
 ```bash
 $ systemctl start kbct
@@ -167,7 +169,7 @@ sudo kbct remap --config ~/.config/kbct.yaml
 **Important note:** KBCT is treating `leftshift`/`rightshift` , `leftalt`/`rightalt`, etc. as different keys, so if you want to map both you need to define the mapping twice. This is done on purpose to give fine grained control over configuration.
 
 ### Troubleshooting
-** What is the name of my keyboard? **
+**What is the name of my keyboard?**
 In order to list all the available keyboard devices and their respective names run the following:
 
 ```bash
@@ -182,16 +184,23 @@ Event: time 1641154916.130391, type 1 (EV_KEY), code 106 (KEY_RIGHT), value 0
 Event: time 1641154916.130391, -------------- SYN_REPORT ------------
 ```
 
-** What are the names of the keys? **
+**What are the names of the keys?**
 KBCT uses the lowest possible level keycodes from the Linux kernel to perform remapping. Window managers/desktop environments may have other namings for the same keys for various reasons. To know the exact name of the key you're interested you can use either `sudo evtest /dev/input/eventXX`, or `sudo kbct log-keys --device-path /dev/input/eventXX`` where XX should be replaced by the appropriate device path. Then just type.
+
+**It just does not work**
+Try loading uinput module (KBCT will not function but will not produce an error if the uinput module is not loaded**):
+
+```bash
+sudo modprobe uinput
+```
 
 ### How it works
 
-KBCT is operating on a low enough level to be independent from the window manager or the desktop environment. It is achieved by the following steps
+KBCT is operating on a low enough level to be independent from the window manager or the desktop environment. It is achieved by the following steps:
 
-Since KBCT should be run as root it has enough privileges to  read and grab the output of the keyboard (e.g the output of `/dev/input/event2`). Which means that it becomes readable only for KBCT and the display manager is no longer able to read from the keyboard device.
+Since KBCT should be run as root, it has enough privileges to read and grab the output of a keyboard or another input device (e.g the output of `/dev/input/event2`). Which means that it becomes readable only for KBCT and that the display manager is no longer able to read from that device.
 
-Then KBCT creates another virtual `uinput`device (e.g. `/dev/input/event6`), and sends customized key events to that device. The new mapped keyboard is successfully read by the window manager, which as a result reads customized key events.
+Then KBCT creates another virtual `uinput`device (e.g. `/dev/input/event6`), and sends customized key events to that device. The new mapped keyboard or device is successfully read by the window manager, which as a result reads customized key events.
 
 
 ### Examples
