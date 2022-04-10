@@ -267,7 +267,22 @@ impl EventObserver for KeyLogger {
 	}
 }
 
+fn check_uinput_loaded() {
+	let mut uinput_loaded: bool = false;
+	let contents = std::fs::read_to_string("/proc/modules").unwrap();
+	for line in contents.lines() {
+		if line.starts_with("uinput ") {
+			info!("Module uinput found");
+			uinput_loaded = true;
+			break;
+		}
+	}
+
+	assert!( uinput_loaded, "uinput kernel module must be loaded!" );
+}
+
 fn start_mapper_from_file_conf(config_file: String) -> Result<()> {
+	check_uinput_loaded();
 	let config = serde_yaml::from_str(
 		&*std::fs::read_to_string(config_file.as_str())
 			.expect(&format!("Could not open file {}", config_file)))
