@@ -208,7 +208,7 @@ impl EventObserver for DeviceManager {
 			.is_some();
 
 		if has_updates {
-			DeviceManager::update_captured_kbs(self)
+			self.update_captured_kbs()
 				.map(|observer| ObserverResult::SubscribeNew(observer))
 				.or(Ok(ObserverResult::Nothing))
 		} else {

@@ -4,6 +4,7 @@ extern crate maplit;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
 use std::slice::Iter;
+use std::vec::Vec;
 
 use linked_hash_map::LinkedHashMap;
 use log::{error, warn};
@@ -20,6 +21,7 @@ pub type KbctRootConf = Vec<KbctConf>;
 pub type Result<T> = std::result::Result<T, KbctError>;
 
 type Keycode = i32;
+// Mapping from one keycode to another
 type KeyMap = HashMap<Keycode, Keycode>;
 type KeySet = BTreeSet<Keycode>;
 type ComplexKeyMap = HashMap<KeySet, KeyMap>;
@@ -52,6 +54,11 @@ pub enum KbctError {
 	Error(String),
 }
 
+fn unwrap_kv<E>(kv: (E, E)) -> Vec<E> {
+	let (k, v) = kv;
+	vec![k, v]
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct KbctConf {
 	keyboards: Vec<String>,
@@ -70,7 +77,6 @@ impl KbctConf {
 		Ok(serde_yaml::from_str(&str)?)
 	}
 }
-
 
 #[derive(Debug)]
 struct KbctKeyState {
@@ -114,32 +120,14 @@ impl Kbct {
 	}
 
 	pub fn new(conf: KbctConf, key_code: impl Fn(&String) -> Option<i32>) -> Result<Kbct> {
-		let simple = conf.keymap.unwrap_or_default();
-		let complex = conf.layers.unwrap_or_default();
+		Self::check_keys(&conf, key_code)?;
 
-		let unwrap_kv = |(k, v)| vec![k, v];
 		let str_to_code = |k| key_code(k).unwrap();
 		let str_to_code_pair = |(k, v)| (str_to_code(k), str_to_code(v));
-
-		let all_keys = simple
-			.iter()
-			.flat_map(unwrap_kv)
-			.chain(complex.iter().flat_map(|x| {
-				x.modifiers
-					.iter()
-					.chain(x.keymap.iter().flat_map(unwrap_kv))
-			}));
-
-		let unknown_keys: BTreeSet<&String> = all_keys.filter(|x| key_code(*x).is_none()).collect();
-		if !unknown_keys.is_empty() {
-			return Err(KbctError::Error(format!(
-				"Configuration contains unknown keys: {:?}",
-				unknown_keys
-			)));
-		}
-
+		let simple = conf.keymap.unwrap_or_default();
 		let simple_map: KeyMap = simple.iter().map(str_to_code_pair).collect();
 
+		let complex = conf.layers.unwrap_or_default();
 		let complex_map: HashMap<KeySet, KeyMap> = complex
 			.iter()
 			.map(|x| {
@@ -157,6 +145,33 @@ impl Kbct {
 			mapped_to_source: hashmap!(),
 			logic_clock: 0,
 		})
+	}
+
+    // Check that the keys defined in the configuration are all valid
+	fn check_keys(conf: &KbctConf, key_code: impl Fn(&String) -> Option<i32>) -> Result<()> {
+		let keys = Self::key_stream_from_conf(conf);
+		let unknown_keys: BTreeSet<&String> = keys.filter(|x| key_code(*x).is_none()).collect();
+		if !unknown_keys.is_empty() {
+			Err(KbctError::Error(format!(
+				"Configuration contains unknown keys: {:?}",
+				unknown_keys
+			)))
+		} else {
+			Ok(())
+		}
+	}
+
+	fn key_stream_from_conf(conf: &KbctConf) -> impl Iterator<Item = &String> {
+		let simple = conf.keymap.unwrap_or_default();
+		let complex = conf.layers.unwrap_or_default();
+
+		let simple_keys = simple.iter().flat_map(unwrap_kv);
+		let complex_keys = complex.iter().flat_map(|x| {
+			x.modifiers
+				.iter()
+				.chain(x.keymap.iter().flat_map(unwrap_kv))
+		});
+		simple_keys.chain(complex_keys)
 	}
 
 	fn get_active_complex_modifiers(&self) -> Option<(&KeySet, &KeyMap)> {
