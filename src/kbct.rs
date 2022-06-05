@@ -120,7 +120,7 @@ impl Kbct {
 	}
 
 	pub fn new(conf: KbctConf, key_code: impl Fn(&String) -> Option<i32>) -> Result<Kbct> {
-		Self::check_keys(&conf, key_code)?;
+		Self::check_keys(&conf, &key_code)?;
 
 		let str_to_code = |k| key_code(k).unwrap();
 		let str_to_code_pair = |(k, v)| (str_to_code(k), str_to_code(v));
@@ -149,8 +149,8 @@ impl Kbct {
 
     // Check that the keys defined in the configuration are all valid
 	fn check_keys(conf: &KbctConf, key_code: impl Fn(&String) -> Option<i32>) -> Result<()> {
-		let keys = Self::key_stream_from_conf(conf);
-		let unknown_keys: BTreeSet<&String> = keys.filter(|x| key_code(*x).is_none()).collect();
+		let keys = Self::collect_used_keys(conf);
+		let unknown_keys: BTreeSet<&String> = keys.into_iter().filter(|x| key_code(*x).is_none()).collect();
 		if !unknown_keys.is_empty() {
 			Err(KbctError::Error(format!(
 				"Configuration contains unknown keys: {:?}",
@@ -161,17 +161,22 @@ impl Kbct {
 		}
 	}
 
-	fn key_stream_from_conf(conf: &KbctConf) -> impl Iterator<Item = &String> {
-		let simple = conf.keymap.unwrap_or_default();
-		let complex = conf.layers.unwrap_or_default();
-
-		let simple_keys = simple.iter().flat_map(unwrap_kv);
-		let complex_keys = complex.iter().flat_map(|x| {
-			x.modifiers
-				.iter()
-				.chain(x.keymap.iter().flat_map(unwrap_kv))
-		});
-		simple_keys.chain(complex_keys)
+    // Collects all keys used through the configuration
+	fn collect_used_keys<'a>(conf: &'a KbctConf) -> Vec<&'a String> {
+        let mut keys = Vec::new();
+		if let Some(simple) = conf.keymap.as_ref() {
+            let simple_keys = simple.iter().flat_map(unwrap_kv);
+            keys.extend(simple_keys);
+		}
+		if let Some(complex) = conf.layers.as_ref() {
+            let complex_keys = complex.iter().flat_map(|x| {
+                x.modifiers
+                    .iter()
+                    .chain(x.keymap.iter().flat_map(unwrap_kv))
+            });
+            keys.extend(complex_keys);
+		}
+        keys
 	}
 
 	fn get_active_complex_modifiers(&self) -> Option<(&KeySet, &KeyMap)> {
