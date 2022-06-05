@@ -88,17 +88,17 @@ struct KbctKeyState {
 /// Structure representing the whole user configuration
 #[derive(Debug, Default)]
 pub struct Kbct {
-    /// Mapping `keycode -> keycode` for the default mapping
+	/// Mapping `keycode -> keycode` for the default mapping
 	simple_map: KeyMap,
-    /// Definitions of user layers
-    /// A layer is also a mapping `keycode -> keycode`.
+	/// Definitions of user layers
+	/// A layer is also a mapping `keycode -> keycode`.
 	/// Each layer is indexed by a set of keycodes enabling it.
 	complex_map: ComplexKeyMap,
-    /// State of each keycode, indexed by the keycode itself
+	/// State of each keycode, indexed by the keycode itself
 	source_to_mapped: KeyStateMap,
-    /// ???
+	/// ???
 	mapped_to_source: ReverseKeyMap,
-    /// Time of the internal system
+	/// Time of the internal system
 	logic_clock: u64,
 }
 
@@ -153,10 +153,13 @@ impl Kbct {
 		})
 	}
 
-    /// Check that the keys defined in the configuration are all valid
+	/// Check that the keys defined in the configuration are all valid
 	fn check_keys(conf: &KbctConf, key_code: impl Fn(&String) -> Option<i32>) -> Result<()> {
 		let keys = Self::collect_used_keys(conf);
-		let unknown_keys: BTreeSet<&String> = keys.into_iter().filter(|x| key_code(*x).is_none()).collect();
+		let unknown_keys: BTreeSet<&String> = keys
+			.into_iter()
+			.filter(|x| key_code(*x).is_none())
+			.collect();
 		if !unknown_keys.is_empty() {
 			Err(KbctError::Error(format!(
 				"Configuration contains unknown keys: {:?}",
@@ -167,22 +170,22 @@ impl Kbct {
 		}
 	}
 
-    /// Collects all keys used through the configuration
+	/// Collects all keys used through the configuration
 	fn collect_used_keys<'a>(conf: &'a KbctConf) -> Vec<&'a String> {
-        let mut keys = Vec::new();
+		let mut keys = Vec::new();
 		if let Some(simple) = conf.keymap.as_ref() {
-            let simple_keys = simple.iter().flat_map(unwrap_kv);
-            keys.extend(simple_keys);
+			let simple_keys = simple.iter().flat_map(unwrap_kv);
+			keys.extend(simple_keys);
 		}
 		if let Some(complex) = conf.layers.as_ref() {
-            let complex_keys = complex.iter().flat_map(|x| {
-                x.modifiers
-                    .iter()
-                    .chain(x.keymap.iter().flat_map(unwrap_kv))
-            });
-            keys.extend(complex_keys);
+			let complex_keys = complex.iter().flat_map(|x| {
+				x.modifiers
+					.iter()
+					.chain(x.keymap.iter().flat_map(unwrap_kv))
+			});
+			keys.extend(complex_keys);
 		}
-        keys
+		keys
 	}
 
 	fn get_active_complex_modifiers(&self) -> Option<(&KeySet, &KeyMap)> {
@@ -255,6 +258,42 @@ impl Kbct {
 
 	pub fn map_event(&mut self, ev: KbctEvent) -> Vec<KbctEvent> {
 		use KbctKeyStatus::*;
+		let not_mapped = ev.code;
+
+		let prev_state = self.source_to_mapped.get(&not_mapped);
+		let prev_status = prev_state.map(|x| x.status).unwrap_or(Released);
+		let events = match (prev_status, ev.ev_type) {
+			(Released, Clicked) => Some(self.on_click(&ev)),
+			(Clicked, Released) | (Pressed, Released) => {
+				if prev_state.is_none() {
+					warn!("WARNING: key press was not recorded, skipping");
+					None
+				} else {
+					Some(self.on_release(&ev))
+				}
+			}
+			(ForceReleased, Released) => {
+				self.record_forced_released(&ev);
+				None
+			}
+			(Clicked, Pressed) | (Pressed, Pressed) => {
+				let mapped = prev_state.unwrap().mapped_code;
+				Some(vec![Kbct::make_ev(mapped, Pressed)])
+			}
+			(ForceReleased, Pressed) => None,
+			_ => {
+				warn!(
+					"Illegal state transition {:?} {:?}",
+					prev_status, ev.ev_type
+				);
+				None
+			}
+		};
+		events.unwrap_or_else(|| vec![])
+	}
+
+	fn on_click(&mut self, ev: &KbctEvent) -> Vec<KbctEvent> {
+		use KbctKeyStatus::*;
 		let empty_map = hashmap!();
 		let empty_set = btreeset!();
 
@@ -265,77 +304,61 @@ impl Kbct {
 			.unwrap_or((&empty_set, &empty_map));
 
 		let complex_mapped = *complex_keymap.get(&not_mapped).unwrap_or(&simple_mapped);
+		let synthetic_modifier_events: Vec<_> = active_modifiers
+			.iter()
+			.flat_map(|modifier_raw| {
+				let modifier_mapped = self.source_to_mapped.get(&modifier_raw).unwrap();
 
-		let prev_state = self.source_to_mapped.get(&not_mapped);
-		let prev_status = prev_state.map(|x| x.status).unwrap_or(Released);
-		let mut result = vec![];
+				let is_complex = complex_mapped != simple_mapped;
 
-		match (prev_status, ev.ev_type) {
-			(Released, Clicked) => {
-				let synthetic_modifier_events: Vec<_> = active_modifiers
-					.iter()
-					.flat_map(|modifier_raw| {
-						let modifier_mapped = self.source_to_mapped.get(&modifier_raw).unwrap();
-
-						let is_complex = complex_mapped != simple_mapped;
-
-						match (modifier_mapped.status, is_complex) {
-							(Clicked, true) => {
-								Some((*modifier_raw, modifier_mapped.mapped_code, ForceReleased))
-							}
-							(ForceReleased, false) => {
-								Some((*modifier_raw, modifier_mapped.mapped_code, Clicked))
-							}
-							(Released, _) => panic!("Illegal state"),
-							_ => None,
-						}
-					})
-					.collect();
-
-				for (source, mapped, status) in synthetic_modifier_events.iter() {
-					self.change_key_state(*source, *mapped, *status)
-				}
-				self.change_key_state(not_mapped, complex_mapped, Clicked);
-
-				result = synthetic_modifier_events
-					.iter()
-					.map(|(_s, target, st)| Kbct::make_ev(*target, *st))
-					.collect();
-				result.push(Kbct::make_ev(complex_mapped, Clicked));
-			}
-			(Clicked, Released) | (Pressed, Released) => {
-				if prev_state.is_none() {
-					warn!("WARNING: key press was not recorded, skipping");
-				} else {
-					let prev_mapped_code = prev_state.unwrap().mapped_code;
-					let down_keys = self
-						.mapped_to_source
-						.get(&prev_mapped_code)
-						.map(|x| x.len())
-						.unwrap_or(0);
-					if down_keys == 1 {
-						result.push(Kbct::make_ev(prev_mapped_code, Released));
+				match (modifier_mapped.status, is_complex) {
+					(Clicked, true) => {
+						Some((*modifier_raw, modifier_mapped.mapped_code, ForceReleased))
 					}
-					self.change_key_state(not_mapped, prev_mapped_code, Released);
+					(ForceReleased, false) => {
+						Some((*modifier_raw, modifier_mapped.mapped_code, Clicked))
+					}
+					(Released, _) => panic!("Illegal state"),
+					_ => None,
 				}
-			}
-			(ForceReleased, Released) => {
-				let prev_code = prev_state.unwrap().mapped_code;
-				self.change_key_state(not_mapped, prev_code, Released);
-			}
-			(Clicked, Pressed) | (Pressed, Pressed) => {
-				let mapped = prev_state.unwrap().mapped_code;
-				result.push(Kbct::make_ev(mapped, Pressed));
-			}
-			(ForceReleased, Pressed) => {}
-			_ => {
-				warn!(
-					"Illegal state transition {:?} {:?}",
-					prev_status, ev.ev_type
-				);
-			}
+			})
+			.collect();
+
+		for (source, mapped, status) in synthetic_modifier_events.iter() {
+			self.change_key_state(*source, *mapped, *status)
 		}
+		self.change_key_state(not_mapped, complex_mapped, Clicked);
+
+		let mut result: Vec<KbctEvent> = synthetic_modifier_events
+			.iter()
+			.map(|(_s, target, st)| Kbct::make_ev(*target, *st))
+			.collect();
+		result.push(Kbct::make_ev(complex_mapped, Clicked));
 		result
+	}
+
+	fn on_release(&mut self, ev: &KbctEvent) -> Vec<KbctEvent> {
+		use KbctKeyStatus::*;
+		let not_mapped = ev.code;
+		let prev_state = self.source_to_mapped.get(&not_mapped);
+		let prev_mapped_code = prev_state.unwrap().mapped_code;
+		let down_keys = self
+			.mapped_to_source
+			.get(&prev_mapped_code)
+			.map(|x| x.len())
+			.unwrap_or(0);
+		let mut result = vec![];
+		if down_keys == 1 {
+			result.push(Kbct::make_ev(prev_mapped_code, Released));
+		}
+		self.change_key_state(not_mapped, prev_mapped_code, Released);
+		result
+	}
+
+	fn record_forced_released(&mut self, ev: &KbctEvent) {
+		let prev_state = self.source_to_mapped.get(&ev.code);
+		let prev_code = prev_state.unwrap().mapped_code;
+		self.change_key_state(ev.code, prev_code, KbctKeyStatus::Released);
 	}
 }
 
