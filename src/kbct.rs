@@ -85,12 +85,20 @@ struct KbctKeyState {
 	status: KbctKeyStatus,
 }
 
-#[derive(Debug)]
+/// Structure representing the whole user configuration
+#[derive(Debug, Default)]
 pub struct Kbct {
+    /// Mapping `keycode -> keycode` for the default mapping
 	simple_map: KeyMap,
+    /// Definitions of user layers
+    /// A layer is also a mapping `keycode -> keycode`.
+	/// Each layer is indexed by a set of keycodes enabling it.
 	complex_map: ComplexKeyMap,
+    /// State of each keycode, indexed by the keycode itself
 	source_to_mapped: KeyStateMap,
+    /// ???
 	mapped_to_source: ReverseKeyMap,
+    /// Time of the internal system
 	logic_clock: u64,
 }
 
@@ -113,9 +121,7 @@ impl Kbct {
 		Kbct {
 			simple_map: simple_keymap,
 			complex_map: complex_keymap,
-			source_to_mapped: Default::default(),
-			mapped_to_source: Default::default(),
-			logic_clock: 0,
+			..Default::default()
 		}
 	}
 
@@ -147,7 +153,7 @@ impl Kbct {
 		})
 	}
 
-    // Check that the keys defined in the configuration are all valid
+    /// Check that the keys defined in the configuration are all valid
 	fn check_keys(conf: &KbctConf, key_code: impl Fn(&String) -> Option<i32>) -> Result<()> {
 		let keys = Self::collect_used_keys(conf);
 		let unknown_keys: BTreeSet<&String> = keys.into_iter().filter(|x| key_code(*x).is_none()).collect();
@@ -161,7 +167,7 @@ impl Kbct {
 		}
 	}
 
-    // Collects all keys used through the configuration
+    /// Collects all keys used through the configuration
 	fn collect_used_keys<'a>(conf: &'a KbctConf) -> Vec<&'a String> {
         let mut keys = Vec::new();
 		if let Some(simple) = conf.keymap.as_ref() {
