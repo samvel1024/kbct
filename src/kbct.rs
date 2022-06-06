@@ -254,9 +254,9 @@ impl Kbct {
 		is_complex: bool,
 	) -> Vec<(KeyMapping, KbctKeyStatus)> {
 		use KbctKeyStatus::*;
+		// for all keys activating the layer...
 		active_modifiers
 			.iter()
-			// for all keys activating the layer...
 			.map(|modifier| {
 				self.source_to_mapped
 					.get(modifier)
@@ -266,7 +266,7 @@ impl Kbct {
 						modifier, active_modifiers
 					))
 			})
-			// ... that are pressed ...
+			// ... build an event releasing modifier or restore it as clicked
 			.flat_map(|(modifier, state)| match (state.status, is_complex) {
 				(Clicked, true) => Some((
 					KeyMapping {
@@ -285,7 +285,6 @@ impl Kbct {
 				(Released, _) => panic!("Illegal state"),
 				_ => None,
 			})
-			// ... build an event releasing modifier or restore it as clicked
 			.collect()
 	}
 
