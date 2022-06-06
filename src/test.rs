@@ -207,12 +207,12 @@ fn test_active_mapping() -> Result<()> {
 	kbct.map_event(Kbct::make_ev(key("B"), Clicked));
 	kbct.map_event(Kbct::make_ev(key("C"), Clicked));
 	let active = kbct.get_active_complex_modifiers().unwrap();
-	assert_eq!(btreeset![key("A"), key("C")], *active.0);
+	assert_eq!(btreeset![key("A"), key("C")], *active);
 
 	let mut kbct = create_test_kbct()?;
 	kbct.map_event(Kbct::make_ev(key("A"), Clicked));
 	let active = kbct.get_active_complex_modifiers().unwrap();
-	assert_eq!(btreeset![key("A")], *active.0);
+	assert_eq!(btreeset![key("A")], *active);
 
 	let mut kbct = create_test_kbct()?;
 	kbct.map_event(Kbct::make_ev(key("B"), Clicked));

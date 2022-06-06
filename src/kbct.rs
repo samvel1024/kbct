@@ -1,4 +1,3 @@
-
 #[macro_use]
 extern crate maplit;
 
@@ -194,33 +193,44 @@ impl Kbct {
 		keys
 	}
 
-	fn get_active_complex_modifiers(&self) -> Option<(&KeySet, &KeyMap)> {
+	/// Gets the definition of the active "layer".
+	///
+	/// ### Return
+	///
+	/// A tuple `(keys, mapping)` where:
+	///  - `keys` contains the list of combinations activating the "layer"
+	///  - `mapping` is the special mapping for this layer
+	fn get_active_complex_modifiers(&self) -> Option<&KeySet> {
 		let cm = &self.complex_map;
-		let stm = &self.source_to_mapped;
-
-		let get_last_pressed_time = |s: &KeySet| -> u64 {
-			s.iter()
-				.map(|x| self.get_last_source_mapping_to(*x).unwrap())
-				.map(|x| stm.get(&x).unwrap().time)
-				.max()
-				.unwrap()
-		};
-
-		let latest_keystroke = |l: &&KeySet, r: &&KeySet| -> Ordering {
-			if l.len() == r.len() {
-				get_last_pressed_time(l).cmp(&get_last_pressed_time(r))
-			} else {
-				l.len().cmp(&r.len())
-			}
-		};
-
-		let all_pressed = |x: &&KeySet| x.iter().find(|x| stm.get(x).is_none()).is_none();
-
-		cm.iter()
+		let active_layers = cm
+			.iter()
 			.map(|(k, _v)| k)
-			.filter(all_pressed)
-			.max_by(latest_keystroke)
-			.map(|x| (x, cm.get(x).unwrap()))
+			.filter(|keys| keys.iter().all(|k| self.is_pressed(*k)));
+		active_layers.max_by(|a, b| self.get_latest_keystroke(a, b))
+	}
+
+	fn get_last_pressed_time(&self, s: &KeySet) -> u64 {
+		let stm = &self.source_to_mapped;
+		s.iter()
+			.filter_map(|k| self.get_last_source_mapping_to(*k))
+			.filter_map(|k| stm.get(&k))
+			.map(|state| state.time)
+			.max()
+			.unwrap()
+	}
+
+	fn get_latest_keystroke(&self, l: &KeySet, r: &KeySet) -> Ordering {
+		if l.len() == r.len() {
+			self.get_last_pressed_time(l)
+				.cmp(&self.get_last_pressed_time(r))
+		} else {
+			l.len().cmp(&r.len())
+		}
+	}
+
+	/// Tests if a given physical key is pressed.
+	fn is_pressed(&self, key: Keycode) -> bool {
+		self.source_to_mapped.get(&key).is_some()
 	}
 
 	fn make_ev(code: Keycode, ev_type: KbctKeyStatus) -> KbctEvent {
@@ -259,8 +269,14 @@ impl Kbct {
 		self.logic_clock += 1;
 	}
 
-	fn get_last_source_mapping_to(&self, code: Keycode) -> Option<Keycode> {
-		match self.mapped_to_source.get(&code) {
+	/// Gets the last physical keycode emitting a given logical keycode.
+	///
+	/// ### Arguments
+	///
+	///  - `target` - logical keycode to consider
+	///  
+	fn get_last_source_mapping_to(&self, target: Keycode) -> Option<Keycode> {
+		match self.mapped_to_source.get(&target) {
 			Some(x) => x.iter().map(|x| *x.0).last(),
 			None => None,
 		}
@@ -304,16 +320,18 @@ impl Kbct {
 
 	fn on_click(&mut self, ev: &KbctEvent) -> Vec<KbctEvent> {
 		use KbctKeyStatus::*;
-		let empty_map = hashmap!();
-		let empty_set = btreeset!();
 
 		let not_mapped = ev.code;
 		let simple_mapped = *self.simple_map.get(&not_mapped).unwrap_or(&not_mapped);
-		let (active_modifiers, complex_keymap) = self
-			.get_active_complex_modifiers()
-			.unwrap_or((&empty_set, &empty_map));
 
-		let complex_mapped = *complex_keymap.get(&not_mapped).unwrap_or(&simple_mapped);
+		let empty_set = btreeset!();
+		let active_modifiers = self.get_active_complex_modifiers().unwrap_or(&empty_set);
+		let complex_mapped = *self
+			.complex_map
+			.get(active_modifiers)
+			.and_then(|layer| layer.get(&not_mapped))
+			.unwrap_or(&simple_mapped);
+
 		let synthetic_modifier_events: Vec<_> = active_modifiers
 			.iter()
 			.flat_map(|modifier_raw| {
@@ -385,7 +403,7 @@ impl Kbct {
 	}
 
 	/// Records that a keycode was engaged
-	/// 
+	///
 	/// This sets in `source_to_mapped` the chosen logical target keycode for the physical keycode.
 	fn record_pressed(&mut self, mapping: &KeyMapping, status: KbctKeyStatus) {
 		self.source_to_mapped.insert(
@@ -399,15 +417,14 @@ impl Kbct {
 	}
 
 	/// Records that a keycode was released
-	/// 
+	///
 	/// This unsets the mapping from `source_to_mapped`.
 	fn record_release(&mut self, mapping: &KeyMapping) {
 		self.source_to_mapped.remove(&mapping.source);
 	}
 
-
 	/// Adds that a logical keycode has been emitted for a given physical keycode.
-	/// 
+	///
 	/// Why???
 	fn add_key_source(&mut self, mapping: &KeyMapping) {
 		self.mapped_to_source
@@ -417,7 +434,7 @@ impl Kbct {
 	}
 
 	/// Removes the source of a given logical keycode.
-	/// 
+	///
 	/// Why???
 	fn remove_key_source(&mut self, mapping: &KeyMapping) {
 		if let Some(set) = self.mapped_to_source.get_mut(&mapping.target) {
