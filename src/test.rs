@@ -143,7 +143,7 @@ fn test_map_event() -> Result<()> {
 }
 
 #[test]
-fn test_1() {
+fn test_1_with_consecutive_layers() {
 	let mut kbct = KbctTestContext::new(
 		hashmap! {"1" => "2", "3" => "4"},
 		hashmap! {
@@ -163,7 +163,7 @@ fn test_1() {
 }
 
 #[test]
-fn test_2() {
+fn test_2_with_some_modifier_in_simple_layer() {
 	let mut kbct = KbctTestContext::new(
 		hashmap! {"1" => "2", "3" => "4", "A" => "C"},
 		hashmap! {
@@ -183,7 +183,7 @@ fn test_2() {
 }
 
 #[test]
-fn test_3() {
+fn test_3_with_all_modifiers_in_simple_layer() {
 	let mut kbct = KbctTestContext::new(
 		hashmap! {
 		"X" => "Z",
@@ -204,9 +204,26 @@ fn test_3() {
 	);
 }
 
+#[ignore]
+#[test]
+fn test_with_some_modifier_in_complex_layer() {
+	let mut kbct = KbctTestContext::new(
+		hashmap! {"A" => "B"},
+		hashmap! {
+		btreeset! {"X"} => hashmap!{"Y" => "E", "B" => "A"},
+		btreeset! {"X", "Y"} => hashmap! {"C" => "D"}},
+	);
+
+	kbct.click("X", vec![("X", Clicked)]);
+	kbct.click("Y", vec![("X", ForceReleased), ("E", Clicked)]);
+	kbct.release("C", vec![("E", ForceReleased), ("D", Released)]);
+}
+
 #[test]
 fn test_active_mapping_with_one_possibility() -> Result<()> {
-	let mut ctx = KbctTestContext { kbct: create_test_kbct()?};
+	let mut ctx = KbctTestContext {
+		kbct: create_test_kbct()?,
+	};
 	ctx.just_click("A");
 	let active = ctx.kbct.get_active_complex_modifiers().unwrap();
 	assert_eq!(btreeset![key("A")], *active);
@@ -215,7 +232,9 @@ fn test_active_mapping_with_one_possibility() -> Result<()> {
 
 #[test]
 fn test_active_mapping_with_larger_keyset() -> Result<()> {
-	let mut ctx = KbctTestContext { kbct: create_test_kbct()?};
+	let mut ctx = KbctTestContext {
+		kbct: create_test_kbct()?,
+	};
 	ctx.just_click("A");
 	ctx.just_click("B");
 	let active = ctx.kbct.get_active_complex_modifiers().unwrap();
@@ -225,7 +244,9 @@ fn test_active_mapping_with_larger_keyset() -> Result<()> {
 
 #[test]
 fn test_active_mapping_with_latest_active() -> Result<()> {
-	let mut ctx = KbctTestContext { kbct: create_test_kbct()?};
+	let mut ctx = KbctTestContext {
+		kbct: create_test_kbct()?,
+	};
 	ctx.just_click("A");
 	ctx.just_click("B");
 	ctx.just_click("C");
@@ -236,7 +257,9 @@ fn test_active_mapping_with_latest_active() -> Result<()> {
 
 #[test]
 fn test_active_mapping_without_active() -> Result<()> {
-	let mut ctx = KbctTestContext { kbct: create_test_kbct()?};
+	let mut ctx = KbctTestContext {
+		kbct: create_test_kbct()?,
+	};
 	ctx.just_click("B");
 	let active = ctx.kbct.get_active_complex_modifiers();
 	assert!(active.is_none());
