@@ -221,30 +221,42 @@ impl Kbct {
 		KbctEvent { code, ev_type }
 	}
 
+	/// Updates the state of a given key.
+	///
+	/// ### Arguments
+	///
+	///  - `source` - the physical key
+	///  - `mapped` - the logical key
+	///  - `status` - the new state of the key
 	fn change_key_state(&mut self, source: Keycode, mapped: Keycode, status: KbctKeyStatus) {
+		use KbctKeyStatus::*;
 		let empty_hashet = LinkedHashSet::new();
 
-		if status != KbctKeyStatus::Released {
-			self.mapped_to_source
-				.entry(mapped)
-				.or_insert(empty_hashet)
-				.insert(source, true);
-			self.source_to_mapped.insert(
-				source,
-				KbctKeyState {
-					time: self.logic_clock,
-					mapped_code: mapped,
-					status,
-				},
-			);
-		} else {
-			let set = self.mapped_to_source.entry(mapped).or_insert(empty_hashet);
-			set.remove(&source);
-			if set.is_empty() {
-				self.mapped_to_source.remove(&mapped);
+		match status {
+			// FIXME why recording a released as a down
+			ForceReleased | Pressed | Clicked => {
+				self.mapped_to_source
+					.entry(mapped)
+					.or_insert(empty_hashet)
+					.insert(source, true);
+				self.source_to_mapped.insert(
+					source,
+					KbctKeyState {
+						time: self.logic_clock,
+						mapped_code: mapped,
+						status,
+					},
+				);
 			}
+			Released => {
+				let set = self.mapped_to_source.entry(mapped).or_insert(empty_hashet);
+				set.remove(&source);
+				if set.is_empty() {
+					self.mapped_to_source.remove(&mapped);
+				}
 
-			self.source_to_mapped.remove(&source);
+				self.source_to_mapped.remove(&source);
+			}
 		}
 		self.logic_clock += 1;
 	}
@@ -265,6 +277,7 @@ impl Kbct {
 		let events = match (prev_status, ev.ev_type) {
 			(Released, Clicked) => Some(self.on_click(&ev)),
 			(Clicked, Released) | (Pressed, Released) => {
+				// FIXME? cannot happen: prev_state = None => prev_status = Released
 				if prev_state.is_none() {
 					warn!("WARNING: key press was not recorded, skipping");
 					None
@@ -277,8 +290,7 @@ impl Kbct {
 				None
 			}
 			(Clicked, Pressed) | (Pressed, Pressed) => {
-				let mapped = prev_state.unwrap().mapped_code;
-				Some(vec![Kbct::make_ev(mapped, Pressed)])
+				Some(Self::repeat_press(&prev_state.unwrap()))
 			}
 			(ForceReleased, Pressed) => None,
 			_ => {
@@ -337,21 +349,29 @@ impl Kbct {
 		result
 	}
 
+	/// Produce events on the release of keyboard keys or mouse buttons
+	///
+	/// ### Arguments:
+	///
+	///  - `ev` - the event received upon the release
+	///
+	/// ### Returns
+	///
+	/// the list of simulated events
 	fn on_release(&mut self, ev: &KbctEvent) -> Vec<KbctEvent> {
 		use KbctKeyStatus::*;
-		let not_mapped = ev.code;
-		let prev_state = self.source_to_mapped.get(&not_mapped);
+		let released_keycode = ev.code;
+		let prev_state = self.source_to_mapped.get(&released_keycode);
 		let prev_mapped_code = prev_state.unwrap().mapped_code;
 		let down_keys = self
 			.mapped_to_source
 			.get(&prev_mapped_code)
-			.map(|x| x.len())
-			.unwrap_or(0);
+			.map(|x| x.len());
 		let mut result = vec![];
-		if down_keys == 1 {
+		if down_keys == Some(1) {
 			result.push(Kbct::make_ev(prev_mapped_code, Released));
 		}
-		self.change_key_state(not_mapped, prev_mapped_code, Released);
+		self.change_key_state(released_keycode, prev_mapped_code, Released);
 		result
 	}
 
@@ -359,6 +379,11 @@ impl Kbct {
 		let prev_state = self.source_to_mapped.get(&ev.code);
 		let prev_code = prev_state.unwrap().mapped_code;
 		self.change_key_state(ev.code, prev_code, KbctKeyStatus::Released);
+	}
+
+	fn repeat_press(state: &KbctKeyState) -> Vec<KbctEvent> {
+		let mapped = state.mapped_code;
+		vec![Self::make_ev(mapped, KbctKeyStatus::Pressed)]
 	}
 }
 
