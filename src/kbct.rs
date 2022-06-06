@@ -115,9 +115,13 @@ pub struct KbctEvent {
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum KbctKeyStatus {
+	/// Internal status representing a simulated release of the key
 	ForceReleased,
+	/// Key release
 	Released,
+	/// Key press
 	Clicked,
+	/// Key repetition (from source hardware)
 	Pressed,
 }
 
@@ -233,6 +237,68 @@ impl Kbct {
 		self.source_to_mapped.get(&key).is_some()
 	}
 
+	fn get_simple_target(&self, ev: &KbctEvent) -> Option<Keycode> {
+		self.simple_map.get(&ev.code).map(|k| *k)
+	}
+
+	fn get_target_in_complex(&self, ev: &KbctEvent, active_modifiers: &KeySet) -> Option<Keycode> {
+		self.complex_map
+			.get(active_modifiers)
+			.and_then(|layer| layer.get(&ev.code))
+			.map(|k| *k)
+	}
+
+	fn build_modifier_events(
+		&self,
+		active_modifiers: &KeySet,
+		is_complex: bool,
+	) -> Vec<(KeyMapping, KbctKeyStatus)> {
+		use KbctKeyStatus::*;
+		println!("mods = {:?}", active_modifiers);
+		active_modifiers
+			.iter()
+			// for all keys activating the layer...
+			.filter_map(|modifier| {
+				self.source_to_mapped
+					.get(modifier)
+					.map(|state| (modifier, state))
+			})
+			// ... that are pressed ...
+			.flat_map(|(modifier, state)| match (state.status, is_complex) {
+				(Clicked, true) => Some((
+					KeyMapping {
+						source: *modifier,
+						target: state.mapped_code,
+					},
+					ForceReleased,
+				)),
+				(ForceReleased, false) => Some((
+					KeyMapping {
+						source: *modifier,
+						target: state.mapped_code,
+					},
+					Clicked,
+				)),
+				(Released, _) => panic!("Illegal state"),
+				_ => None,
+			})
+			// ... build an event releasing modifier or restore it as clicked
+			.collect()
+	}
+
+	fn record_order_effects(&mut self, orders: &Vec<(KeyMapping, KbctKeyStatus)>) {
+		for (KeyMapping { source, target }, status) in orders.iter() {
+			self.change_key_state(*source, *target, *status)
+		}
+	}
+
+	fn make_events(orders: &Vec<(KeyMapping, KbctKeyStatus)>) -> Vec<KbctEvent> {
+		orders
+			.iter()
+			.map(|(mapping, st)| Kbct::make_ev(mapping.target, *st))
+			.collect()
+	}
+
 	fn make_ev(code: Keycode, ev_type: KbctKeyStatus) -> KbctEvent {
 		KbctEvent { code, ev_type }
 	}
@@ -321,48 +387,31 @@ impl Kbct {
 	fn on_click(&mut self, ev: &KbctEvent) -> Vec<KbctEvent> {
 		use KbctKeyStatus::*;
 
-		let not_mapped = ev.code;
-		let simple_mapped = *self.simple_map.get(&not_mapped).unwrap_or(&not_mapped);
+		let simple_mapped = self.get_simple_target(ev);
 
-		let empty_set = btreeset!();
-		let active_modifiers = self.get_active_complex_modifiers().unwrap_or(&empty_set);
-		let complex_mapped = *self
-			.complex_map
-			.get(active_modifiers)
-			.and_then(|layer| layer.get(&not_mapped))
-			.unwrap_or(&simple_mapped);
+		let active_modifiers = self.get_active_complex_modifiers();
+		let complex_mapped = active_modifiers.and_then(|keys| self.get_target_in_complex(ev, keys));
 
-		let synthetic_modifier_events: Vec<_> = active_modifiers
-			.iter()
-			.flat_map(|modifier_raw| {
-				let modifier_mapped = self.source_to_mapped.get(&modifier_raw).unwrap();
+		let mut event_orders: Vec<_> = match active_modifiers {
+			Some(keys) => {
+				let is_complex = match (complex_mapped, simple_mapped) {
+					(Some(cm), Some(sm)) => cm == sm,
+					_ => false,
+				};
+				self.build_modifier_events(keys, is_complex)
+			}
+			None => vec![],
+		};
+		event_orders.push((
+			KeyMapping {
+				source: ev.code,
+				target: complex_mapped.or(simple_mapped).unwrap_or(ev.code),
+			},
+			Clicked,
+		));
 
-				let is_complex = complex_mapped != simple_mapped;
-
-				match (modifier_mapped.status, is_complex) {
-					(Clicked, true) => {
-						Some((*modifier_raw, modifier_mapped.mapped_code, ForceReleased))
-					}
-					(ForceReleased, false) => {
-						Some((*modifier_raw, modifier_mapped.mapped_code, Clicked))
-					}
-					(Released, _) => panic!("Illegal state"),
-					_ => None,
-				}
-			})
-			.collect();
-
-		for (source, mapped, status) in synthetic_modifier_events.iter() {
-			self.change_key_state(*source, *mapped, *status)
-		}
-		self.change_key_state(not_mapped, complex_mapped, Clicked);
-
-		let mut result: Vec<KbctEvent> = synthetic_modifier_events
-			.iter()
-			.map(|(_s, target, st)| Kbct::make_ev(*target, *st))
-			.collect();
-		result.push(Kbct::make_ev(complex_mapped, Clicked));
-		result
+		self.record_order_effects(&event_orders);
+		Self::make_events(&event_orders)
 	}
 
 	/// Produce events on the release of keyboard keys or mouse buttons
