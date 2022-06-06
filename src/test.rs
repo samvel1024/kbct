@@ -73,6 +73,10 @@ impl KbctTestContext {
 		KbctTestContext { kbct }
 	}
 
+	fn just_click(&mut self, s: &str) {
+		self.kbct.map_event(Kbct::make_ev(key(s), Clicked));
+	}
+
 	fn run_test(&mut self, s: &str, ev_type: KbctKeyStatus, expected: Vec<(&str, KbctKeyStatus)>) {
 		let exp: Vec<KbctEvent> = expected
 			.iter()
@@ -151,7 +155,9 @@ fn test_1() {
 	kbct.click("A", vec![("A", Clicked)]);
 	kbct.click("1", vec![("A", ForceReleased), ("3", Clicked)]);
 	kbct.release("1", vec![("3", Released)]);
+	println!("Before clicking B");
 	kbct.click("B", vec![("A", Clicked), ("B", Clicked)]);
+	println!("After clicking B");
 	kbct.click(
 		"1",
 		vec![("A", ForceReleased), ("B", ForceReleased), ("5", Clicked)],
@@ -201,22 +207,40 @@ fn test_3() {
 }
 
 #[test]
-fn test_active_mapping() -> Result<()> {
-	let mut kbct = create_test_kbct()?;
-	kbct.map_event(Kbct::make_ev(key("A"), Clicked));
-	kbct.map_event(Kbct::make_ev(key("B"), Clicked));
-	kbct.map_event(Kbct::make_ev(key("C"), Clicked));
-	let active = kbct.get_active_complex_modifiers().unwrap();
-	assert_eq!(btreeset![key("A"), key("C")], *active);
-
-	let mut kbct = create_test_kbct()?;
-	kbct.map_event(Kbct::make_ev(key("A"), Clicked));
-	let active = kbct.get_active_complex_modifiers().unwrap();
+fn test_active_mapping_with_one_possibility() -> Result<()> {
+	let mut ctx = KbctTestContext { kbct: create_test_kbct()?};
+	ctx.just_click("A");
+	let active = ctx.kbct.get_active_complex_modifiers().unwrap();
 	assert_eq!(btreeset![key("A")], *active);
+	Ok(())
+}
 
-	let mut kbct = create_test_kbct()?;
-	kbct.map_event(Kbct::make_ev(key("B"), Clicked));
-	let active = kbct.get_active_complex_modifiers();
+#[test]
+fn test_active_mapping_with_larger_keyset() -> Result<()> {
+	let mut ctx = KbctTestContext { kbct: create_test_kbct()?};
+	ctx.just_click("A");
+	ctx.just_click("B");
+	let active = ctx.kbct.get_active_complex_modifiers().unwrap();
+	assert_eq!(btreeset![key("A"), key("B")], *active);
+	Ok(())
+}
+
+#[test]
+fn test_active_mapping_with_latest_active() -> Result<()> {
+	let mut ctx = KbctTestContext { kbct: create_test_kbct()?};
+	ctx.just_click("A");
+	ctx.just_click("B");
+	ctx.just_click("C");
+	let active = ctx.kbct.get_active_complex_modifiers().unwrap();
+	assert_eq!(btreeset![key("A"), key("C")], *active);
+	Ok(())
+}
+
+#[test]
+fn test_active_mapping_without_active() -> Result<()> {
+	let mut ctx = KbctTestContext { kbct: create_test_kbct()?};
+	ctx.just_click("B");
+	let active = ctx.kbct.get_active_complex_modifiers();
 	assert!(active.is_none());
 	Ok(())
 }
