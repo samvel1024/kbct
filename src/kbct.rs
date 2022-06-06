@@ -1,3 +1,4 @@
+
 #[macro_use]
 extern crate maplit;
 
@@ -6,7 +7,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::slice::Iter;
 use std::vec::Vec;
 
-use linked_hash_map::{LinkedHashMap, OccupiedEntry};
+use linked_hash_map::LinkedHashMap;
 use log::{error, warn};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -15,6 +16,11 @@ use thiserror::Error;
 struct KbctComplexConf {
 	modifiers: Vec<String>,
 	keymap: HashMap<String, String>,
+}
+
+struct KeyMapping {
+	source: Keycode,
+	target: Keycode,
 }
 
 pub type KbctRootConf = Vec<KbctConf>;
@@ -234,30 +240,20 @@ impl Kbct {
 		match status {
 			// FIXME why recording a released as a down
 			ForceReleased | Pressed | Clicked => {
-				self.mapped_to_source
-					.entry(mapped)
-					.or_insert(LinkedHashMap::new())
-					.insert(source, true);
-				self.source_to_mapped.insert(
+				let mapping = KeyMapping {
 					source,
-					KbctKeyState {
-						time: self.logic_clock,
-						mapped_code: mapped,
-						status,
-					},
-				);
+					target: mapped,
+				};
+				self.record_pressed(&mapping, status);
+				self.add_key_source(&mapping);
 			}
 			Released => {
-				let set = self.mapped_to_source.get_mut(&mapped);
-				if let Some(set) = set {
-					set.remove(&source);
-					if set.is_empty() {
-						self.mapped_to_source.remove(&mapped);
-					}
-				} else {
-					warn!("Release of {} without previous pressed/click", mapped);
-				}
-				self.source_to_mapped.remove(&source);
+				let mapping = KeyMapping {
+					source,
+					target: mapped,
+				};
+				self.record_release(&mapping);
+				self.remove_key_source(&mapping);
 			}
 		}
 		self.logic_clock += 1;
@@ -386,6 +382,55 @@ impl Kbct {
 	fn repeat_press(state: &KbctKeyState) -> Vec<KbctEvent> {
 		let mapped = state.mapped_code;
 		vec![Self::make_ev(mapped, KbctKeyStatus::Pressed)]
+	}
+
+	/// Records that a keycode was engaged
+	/// 
+	/// This sets in `source_to_mapped` the chosen logical target keycode for the physical keycode.
+	fn record_pressed(&mut self, mapping: &KeyMapping, status: KbctKeyStatus) {
+		self.source_to_mapped.insert(
+			mapping.source,
+			KbctKeyState {
+				time: self.logic_clock,
+				mapped_code: mapping.target,
+				status,
+			},
+		);
+	}
+
+	/// Records that a keycode was released
+	/// 
+	/// This unsets the mapping from `source_to_mapped`.
+	fn record_release(&mut self, mapping: &KeyMapping) {
+		self.source_to_mapped.remove(&mapping.source);
+	}
+
+
+	/// Adds that a logical keycode has been emitted for a given physical keycode.
+	/// 
+	/// Why???
+	fn add_key_source(&mut self, mapping: &KeyMapping) {
+		self.mapped_to_source
+			.entry(mapping.target)
+			.or_insert(LinkedHashMap::new())
+			.insert(mapping.source, true);
+	}
+
+	/// Removes the source of a given logical keycode.
+	/// 
+	/// Why???
+	fn remove_key_source(&mut self, mapping: &KeyMapping) {
+		if let Some(set) = self.mapped_to_source.get_mut(&mapping.target) {
+			set.remove(&mapping.source);
+			if set.is_empty() {
+				self.mapped_to_source.remove(&mapping.target);
+			}
+		} else {
+			warn!(
+				"Release of {} (for source {}) without previous pressed/click",
+				mapping.target, mapping.source
+			);
+		}
 	}
 }
 
