@@ -6,7 +6,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::slice::Iter;
 use std::vec::Vec;
 
-use linked_hash_map::LinkedHashMap;
+use linked_hash_map::{LinkedHashMap, OccupiedEntry};
 use log::{error, warn};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -230,14 +230,13 @@ impl Kbct {
 	///  - `status` - the new state of the key
 	fn change_key_state(&mut self, source: Keycode, mapped: Keycode, status: KbctKeyStatus) {
 		use KbctKeyStatus::*;
-		let empty_hashet = LinkedHashSet::new();
 
 		match status {
 			// FIXME why recording a released as a down
 			ForceReleased | Pressed | Clicked => {
 				self.mapped_to_source
 					.entry(mapped)
-					.or_insert(empty_hashet)
+					.or_insert(LinkedHashMap::new())
 					.insert(source, true);
 				self.source_to_mapped.insert(
 					source,
@@ -249,12 +248,15 @@ impl Kbct {
 				);
 			}
 			Released => {
-				let set = self.mapped_to_source.entry(mapped).or_insert(empty_hashet);
-				set.remove(&source);
-				if set.is_empty() {
-					self.mapped_to_source.remove(&mapped);
+				let set = self.mapped_to_source.get_mut(&mapped);
+				if let Some(set) = set {
+					set.remove(&source);
+					if set.is_empty() {
+						self.mapped_to_source.remove(&mapped);
+					}
+				} else {
+					warn!("Release of {} without previous pressed/click", mapped);
 				}
-
 				self.source_to_mapped.remove(&source);
 			}
 		}
