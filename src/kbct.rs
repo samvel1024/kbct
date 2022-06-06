@@ -254,14 +254,17 @@ impl Kbct {
 		is_complex: bool,
 	) -> Vec<(KeyMapping, KbctKeyStatus)> {
 		use KbctKeyStatus::*;
-		println!("mods = {:?}", active_modifiers);
 		active_modifiers
 			.iter()
 			// for all keys activating the layer...
-			.filter_map(|modifier| {
+			.map(|modifier| {
 				self.source_to_mapped
 					.get(modifier)
 					.map(|state| (modifier, state))
+					.expect(&format!(
+						"Modifier {} of keyset {:?} should have been pressed to activate layer",
+						modifier, active_modifiers
+					))
 			})
 			// ... that are pressed ...
 			.flat_map(|(modifier, state)| match (state.status, is_complex) {
@@ -394,10 +397,7 @@ impl Kbct {
 
 		let mut event_orders: Vec<_> = match active_modifiers {
 			Some(keys) => {
-				let is_complex = match (complex_mapped, simple_mapped) {
-					(Some(cm), Some(sm)) => cm == sm,
-					_ => false,
-				};
+				let is_complex = complex_mapped.is_some();
 				self.build_modifier_events(keys, is_complex)
 			}
 			None => vec![],

@@ -155,9 +155,7 @@ fn test_1() {
 	kbct.click("A", vec![("A", Clicked)]);
 	kbct.click("1", vec![("A", ForceReleased), ("3", Clicked)]);
 	kbct.release("1", vec![("3", Released)]);
-	println!("Before clicking B");
 	kbct.click("B", vec![("A", Clicked), ("B", Clicked)]);
-	println!("After clicking B");
 	kbct.click(
 		"1",
 		vec![("A", ForceReleased), ("B", ForceReleased), ("5", Clicked)],
