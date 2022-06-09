@@ -165,7 +165,7 @@ Event: time 1641154916.130391, -------------- SYN_REPORT ------------
 ```
 
 **What are the names of the keys?**
-KBCT uses the lowest possible level keycodes from the Linux kernel to perform remapping. Window managers/desktop environments may have other namings for the same keys for various reasons. To know the exact name of the key you're interested you can use either `sudo evtest /dev/input/eventXX`, or `sudo kbct log-keys --device-path /dev/input/eventXX`` where XX should be replaced by the appropriate device path. Then just type.
+KBCT uses the lowest possible level keycodes from the Linux kernel to perform remapping. Window managers/desktop environments may have other namings for the same keys for various reasons. To know the exact name of the key you're interested you can use either `sudo evtest /dev/input/event<i>`, or `sudo kbct log-keys --device-path /dev/input/event<i>` where `<i>` should be replaced by the appropriate device number. You can then start typing to see the key names.
 
 ### How it works
 
