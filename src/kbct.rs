@@ -17,8 +17,11 @@ struct KbctComplexConf {
 	keymap: HashMap<String, String>,
 }
 
+/// Structure encoding a mapping to perform.
 struct KeyMapping {
+	/// Original physical keycode emitted by the keyboard
 	source: Keycode,
+	/// Chosen logical keycode to emit to the OS
 	target: Keycode,
 }
 
@@ -107,6 +110,7 @@ pub struct Kbct {
 	logic_clock: u64,
 }
 
+/// Kbct event to emit to the OS
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KbctEvent {
 	pub code: Keycode,
@@ -213,20 +217,20 @@ impl Kbct {
 		active_layers.max_by(|a, b| self.get_latest_keystroke(a, b))
 	}
 
-	fn get_last_pressed_time(&self, s: &KeySet) -> u64 {
+	/// Gets the last time at which one of the keycode in the given set has been pressed
+	fn get_last_pressed_time(&self, s: &KeySet) -> Option<u64> {
 		let stm = &self.source_to_mapped;
 		s.iter()
 			.filter_map(|k| self.get_last_source_mapping_to(*k))
 			.filter_map(|k| stm.get(&k))
 			.map(|state| state.time)
 			.max()
-			.unwrap()
 	}
 
 	fn get_latest_keystroke(&self, l: &KeySet, r: &KeySet) -> Ordering {
 		if l.len() == r.len() {
-			self.get_last_pressed_time(l)
-				.cmp(&self.get_last_pressed_time(r))
+			self.get_last_pressed_time(l).unwrap_or(0)
+				.cmp(&self.get_last_pressed_time(r).unwrap_or(0))
 		} else {
 			l.len().cmp(&r.len())
 		}
@@ -237,10 +241,12 @@ impl Kbct {
 		self.source_to_mapped.get(&key).is_some()
 	}
 
+	/// Gets the logical keycode mapped in the standard layer
 	fn get_simple_target(&self, ev: &KbctEvent) -> Option<Keycode> {
 		self.simple_map.get(&ev.code).map(|k| *k)
 	}
 
+	/// Gets the logical keycode mapped in the given custom layer
 	fn get_target_in_complex(&self, ev: &KbctEvent, active_modifiers: &KeySet) -> Option<Keycode> {
 		self.complex_map
 			.get(active_modifiers)
@@ -248,13 +254,22 @@ impl Kbct {
 			.map(|k| *k)
 	}
 
-	fn build_modifier_events(
+	/// Builds the keycode events toggling the previous actions on keycode activating a layer.
+	///
+	/// Because these keycodes have been activated one by one when composing the enabling combination,
+	/// they must be correctly released not to be combined with the mapped keycode in the layer.
+	///
+	/// ### Arguments
+	///
+	///  - `active_modifiers` - set of keycodes activating the layer
+	///  - `use_layer` - flag indicating where the layer is being used
+	///    If used, modifiers are disabled. Otherwise, they are restored
+	fn build_toggle_modifier_events(
 		&self,
 		active_modifiers: &KeySet,
-		is_complex: bool,
+		use_layer: bool,
 	) -> Vec<(KeyMapping, KbctKeyStatus)> {
 		use KbctKeyStatus::*;
-		// for all keys activating the layer...
 		active_modifiers
 			.iter()
 			.map(|modifier| {
@@ -266,8 +281,7 @@ impl Kbct {
 						modifier, active_modifiers
 					))
 			})
-			// ... build an event releasing modifier or restore it as clicked
-			.flat_map(|(modifier, state)| match (state.status, is_complex) {
+			.flat_map(|(modifier, state)| match (state.status, use_layer) {
 				(Clicked, true) => Some((
 					KeyMapping {
 						source: *modifier,
@@ -395,10 +409,7 @@ impl Kbct {
 		let complex_mapped = active_modifiers.and_then(|keys| self.get_target_in_complex(ev, keys));
 
 		let mut event_orders: Vec<_> = match active_modifiers {
-			Some(keys) => {
-				let is_complex = complex_mapped.is_some();
-				self.build_modifier_events(keys, is_complex)
-			}
+			Some(keys) => self.build_toggle_modifier_events(keys, complex_mapped.is_some()),
 			None => vec![],
 		};
 		event_orders.push((
