@@ -216,20 +216,6 @@ fn test_3_with_all_modifiers_in_simple_layer() {
 	);
 }
 
-#[ignore]
-#[test]
-fn test_with_some_modifier_in_complex_layer() {
-	let mut kbct = KbctTestContext::new(
-		hashmap! {"A" => "B"},
-		hashmap! { btreeset! {"X"} => hashmap!{"Y" => "E", "B" => "A"},
-		btreeset! {"X", "Y"} => hashmap! {"C" => "D"}},
-	);
-
-	kbct.click("X", vec![("X", Clicked)]);
-	kbct.click("Y", vec![("X", ForceReleased), ("E", Clicked)]);
-	kbct.release("C", vec![("E", ForceReleased), ("D", Released)]);
-}
-
 #[test]
 fn test_active_mapping_with_one_possibility() -> Result<()> {
 	let mut ctx = KbctTestContext {
