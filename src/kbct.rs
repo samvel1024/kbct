@@ -29,9 +29,10 @@ pub type KbctRootConf = Vec<KbctConf>;
 pub type Result<T> = std::result::Result<T, KbctError>;
 
 type Keycode = i32;
-// Mapping from one keycode to another
+/// Mapping from one keycode to another
 type KeyMap = HashMap<Keycode, Keycode>;
 type KeySet = BTreeSet<Keycode>;
+/// Complex layers indexed by the list of keycodes triggering their activations
 type ComplexKeyMap = HashMap<KeySet, KeyMap>;
 type KeyStateMap = LinkedHashMap<Keycode, KbctKeyState>;
 type LinkedHashSet<T> = LinkedHashMap<T, bool>;
@@ -62,9 +63,10 @@ pub enum KbctError {
 	Error(String),
 }
 
-fn unwrap_kv<E>(kv: (E, E)) -> Vec<E> {
+/// Unwraps a key-value pair into an array of the two values
+fn unwrap_kv<E>(kv: (E, E)) -> [E; 2] {
 	let (k, v) = kv;
-	vec![k, v]
+	[k, v]
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -104,9 +106,11 @@ pub struct Kbct {
 	complex_map: ComplexKeyMap,
 	/// State of each keycode, indexed by the keycode itself
 	source_to_mapped: KeyStateMap,
-	/// ???
+	/// Mapping recording for each logical key the history of the physical keys that produced it
+	///
+	/// If a given logical key has not been used, no history is associated with it
 	mapped_to_source: ReverseKeyMap,
-	/// Time of the internal system
+	/// Internal counter representing passing time
 	logic_clock: u64,
 }
 
@@ -227,9 +231,11 @@ impl Kbct {
 			.max()
 	}
 
+	/// Orders modifiers so that the greater is the one last activated
 	fn get_latest_keystroke(&self, l: &KeySet, r: &KeySet) -> Ordering {
 		if l.len() == r.len() {
-			self.get_last_pressed_time(l).unwrap_or(0)
+			self.get_last_pressed_time(l)
+				.unwrap_or(0)
 				.cmp(&self.get_last_pressed_time(r).unwrap_or(0))
 		} else {
 			l.len().cmp(&r.len())
@@ -246,7 +252,11 @@ impl Kbct {
 		self.simple_map.get(&ev.code).map(|k| *k)
 	}
 
-	/// Gets the logical keycode mapped in the given custom layer
+	/// Gets the logical keycode mapped in the given complex layer
+	///
+	/// ### Arguments
+	///
+	///  - `active_modifiers` - keycodes activating a complex layer
 	fn get_target_in_complex(&self, ev: &KbctEvent, active_modifiers: &KeySet) -> Option<Keycode> {
 		self.complex_map
 			.get(active_modifiers)
@@ -302,12 +312,14 @@ impl Kbct {
 			.collect()
 	}
 
+	/// Records for book-keeping the chosen keycodes to emit
 	fn record_order_effects(&mut self, orders: &Vec<(KeyMapping, KbctKeyStatus)>) {
 		for (KeyMapping { source, target }, status) in orders.iter() {
 			self.change_key_state(*source, *target, *status)
 		}
 	}
 
+	/// Creates the OS event to send for the chosen orders
 	fn make_events(orders: &Vec<(KeyMapping, KbctKeyStatus)>) -> Vec<KbctEvent> {
 		orders
 			.iter()
@@ -450,6 +462,7 @@ impl Kbct {
 		result
 	}
 
+	/// Records that a simulated release of a keycode is happening
 	fn record_forced_released(&mut self, ev: &KbctEvent) {
 		let prev_state = self.source_to_mapped.get(&ev.code);
 		let prev_code = prev_state.unwrap().mapped_code;
@@ -483,8 +496,6 @@ impl Kbct {
 	}
 
 	/// Adds that a logical keycode has been emitted for a given physical keycode.
-	///
-	/// Why???
 	fn add_key_source(&mut self, mapping: &KeyMapping) {
 		self.mapped_to_source
 			.entry(mapping.target)
@@ -493,8 +504,6 @@ impl Kbct {
 	}
 
 	/// Removes the source of a given logical keycode.
-	///
-	/// Why???
 	fn remove_key_source(&mut self, mapping: &KeyMapping) {
 		if let Some(set) = self.mapped_to_source.get_mut(&mapping.target) {
 			set.remove(&mapping.source);

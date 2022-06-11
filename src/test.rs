@@ -4,7 +4,12 @@ use KbctKeyStatus::*;
 
 use crate::*;
 
-fn key(str: &str) -> i32 {
+fn key_to_code(str: &str) -> i32 {
+	assert!(
+		str.len() == 1,
+		"Use only one-letter keys. Received: {}",
+		str
+	);
 	str.as_bytes()[0] as i32
 }
 
@@ -45,7 +50,7 @@ fn create_test_kbct() -> Result<Kbct> {
 				},
 			]),
 		},
-		create_keymap_func(key),
+		create_keymap_func(key_to_code),
 	)
 }
 
@@ -59,14 +64,21 @@ impl KbctTestContext {
 		complex: HashMap<BTreeSet<&str>, HashMap<&str, &str>>,
 	) -> KbctTestContext {
 		fn name_to_codes(map: HashMap<&str, &str>) -> HashMap<i32, i32> {
-			map.into_iter().map(|(l, r)| (key(l), key(r))).collect()
+			map.into_iter()
+				.map(|(l, r)| (key_to_code(l), key_to_code(r)))
+				.collect()
 		}
 
 		let simple_codes = name_to_codes(simple);
 
 		let complex_codes = complex
 			.into_iter()
-			.map(|(l, r)| (l.into_iter().map(|x| key(x)).collect(), name_to_codes(r)))
+			.map(|(l, r)| {
+				(
+					l.into_iter().map(|x| key_to_code(x)).collect(),
+					name_to_codes(r),
+				)
+			})
 			.collect();
 
 		let kbct = Kbct::new_test(simple_codes, complex_codes);
@@ -74,15 +86,15 @@ impl KbctTestContext {
 	}
 
 	fn just_click(&mut self, s: &str) {
-		self.kbct.map_event(Kbct::make_ev(key(s), Clicked));
+		self.kbct.map_event(Kbct::make_ev(key_to_code(s), Clicked));
 	}
 
 	fn run_test(&mut self, s: &str, ev_type: KbctKeyStatus, expected: Vec<(&str, KbctKeyStatus)>) {
 		let exp: Vec<KbctEvent> = expected
 			.iter()
-			.map(|(x, y)| Kbct::make_ev(key(x), *y))
+			.map(|(x, y)| Kbct::make_ev(key_to_code(x), *y))
 			.collect();
-		let result = self.kbct.map_event(Kbct::make_ev(key(s), ev_type));
+		let result = self.kbct.map_event(Kbct::make_ev(key_to_code(s), ev_type));
 		assert_eq!(exp, result);
 	}
 
@@ -209,8 +221,7 @@ fn test_3_with_all_modifiers_in_simple_layer() {
 fn test_with_some_modifier_in_complex_layer() {
 	let mut kbct = KbctTestContext::new(
 		hashmap! {"A" => "B"},
-		hashmap! {
-		btreeset! {"X"} => hashmap!{"Y" => "E", "B" => "A"},
+		hashmap! { btreeset! {"X"} => hashmap!{"Y" => "E", "B" => "A"},
 		btreeset! {"X", "Y"} => hashmap! {"C" => "D"}},
 	);
 
@@ -226,7 +237,7 @@ fn test_active_mapping_with_one_possibility() -> Result<()> {
 	};
 	ctx.just_click("A");
 	let active = ctx.kbct.get_active_complex_modifiers().unwrap();
-	assert_eq!(btreeset![key("A")], *active);
+	assert_eq!(btreeset![key_to_code("A")], *active);
 	Ok(())
 }
 
@@ -238,7 +249,7 @@ fn test_active_mapping_with_larger_keyset() -> Result<()> {
 	ctx.just_click("A");
 	ctx.just_click("B");
 	let active = ctx.kbct.get_active_complex_modifiers().unwrap();
-	assert_eq!(btreeset![key("A"), key("B")], *active);
+	assert_eq!(btreeset![key_to_code("A"), key_to_code("B")], *active);
 	Ok(())
 }
 
@@ -251,7 +262,7 @@ fn test_active_mapping_with_latest_active() -> Result<()> {
 	ctx.just_click("B");
 	ctx.just_click("C");
 	let active = ctx.kbct.get_active_complex_modifiers().unwrap();
-	assert_eq!(btreeset![key("A"), key("C")], *active);
+	assert_eq!(btreeset![key_to_code("A"), key_to_code("C")], *active);
 	Ok(())
 }
 
