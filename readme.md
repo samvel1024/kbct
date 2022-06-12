@@ -145,6 +145,8 @@ sudo kbct remap --config ~/.config/kbct.yaml
 [Here](https://gist.githubusercontent.com/samvel1024/02e5675e04f9d84f098e98bcd0e1ea12/raw/e18d950ce571b4ff5c832cc06406e9a6afece132/keynames.txt) you can find all the available key names to use in the configuration. Essentially those are taken from Linux API [headers](https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h). In case you want to disable a key map it to `reserved`. For example disabling capslock will look like this `capslock: reserved`.
 
 
+**Hint:**
+To begin with, you might want to start KBCT in [debugging mode](#troubleshooting), until you arrive at a working configuration.
 
 **Important note:** KBCT is treating `leftshift`/`rightshift` , `leftalt`/`rightalt`, etc. as different keys, so if you want to map both you need to define the mapping twice. This is done on purpose to give fine grained control over configuration.
 
@@ -166,6 +168,19 @@ Event: time 1641154916.130391, -------------- SYN_REPORT ------------
 
 **What are the names of the keys?**
 KBCT uses the lowest possible level keycodes from the Linux kernel to perform remapping. Window managers/desktop environments may have other namings for the same keys for various reasons. To know the exact name of the key you're interested you can use either `sudo evtest /dev/input/event<i>`, or `sudo kbct log-keys --device-path /dev/input/event<i>` where `<i>` should be replaced by the appropriate device number. You can then start typing to see the key names.
+
+**Debugging KBCT**
+In order to start KBCT in debug mode, you may run the following line:
+
+```bash
+sudo RUST_BACKTRACE=1 kbct --debug-log remap --config <CONFIG-PATH>
+```
+
+When you now press key combinations, you will see the following pattern: `DEBUG kbct > +KEY_NAME -> +KEY_NAME`. The left hand side of `->` corresponds to the input that KBCT receives, whereas the right hand side represents what KBCT proxies the current key state to.
+
+The `+` refers to a **keydown**-event and the `-` refers to a **keyup**-event.
+
+**HINT:** If KBCT behaves erroneously after a config change, it may be worth a try to reload the `uinput` kernel module using `sudo modprobe uinput` before restarting KBCT.
 
 ### How it works
 
