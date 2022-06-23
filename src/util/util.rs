@@ -98,7 +98,7 @@ pub fn map_status_from_linux(val: i32) -> KbctKeyStatus {
 		0 => KbctKeyStatus::Released,
 		1 => KbctKeyStatus::Clicked,
 		2 => KbctKeyStatus::Pressed,
-		_ => panic!(format!("Illegal argument {}", val)),
+		_ => panic!("Illegal argument {}", val),
 	}
 }
 
