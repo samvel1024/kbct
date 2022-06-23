@@ -130,7 +130,7 @@ i↑ ⟶ up↑
 rightalt↑ ⟶ ∅
 ```
 
-Load uinput module (**kbct will not function but will not produce an error if the uinput module is not loaded**)
+Load uinput module
 
 ```bash
 sudo modprobe uinput
