@@ -40,6 +40,26 @@ pub fn get_uinput_device_name(dev_file_path: &String) -> Result<Option<String>> 
 	}
 }
 
+fn insert_device_name_path_pair(map: &mut HashMap<String, String>, name: String, path: String) {
+	if !map.contains_key(&name) {
+		// Map doesn't contain a device by this name -- just insert it and return
+		map.insert(name, path);
+		return;
+	}
+
+	// Map contains a device by this name, append an incrementing number until there is no collision
+	let mut i = 1;
+	loop {
+		let fixed_name = format!("{} ({})", name, i);
+		if !map.contains_key(&fixed_name) {
+			map.insert(fixed_name, path);
+			break;
+		} else {
+			i += 1
+		}
+	}
+}
+
 pub fn get_all_uinput_device_names_to_paths() -> Result<HashMap<String, String>> {
 	let paths = fs::read_dir("/dev/input/")?;
 	let regex: Regex = Regex::new("^.*event\\d+$")?;
@@ -49,7 +69,7 @@ pub fn get_all_uinput_device_names_to_paths() -> Result<HashMap<String, String>>
 		let device_path = path_buf.to_string_lossy();
 		if regex.is_match(&device_path) {
 			if let Some(device_name) = get_uinput_device_name(&device_path.to_string())? {
-				ans.insert(device_name, (*device_path.to_string()).to_string());
+				insert_device_name_path_pair(&mut ans, device_name, (*device_path.to_string()).to_string());
 			}
 		}
 	}
