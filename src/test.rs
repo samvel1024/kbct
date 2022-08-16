@@ -15,9 +15,9 @@ fn create_keymap_func(f: fn(&str) -> i32) -> impl Fn(&String) -> Option<i32> {
 	}
 }
 
-fn map_string(mp: HashMap<&str, &str>) -> HashMap<String, String> {
+fn map_string(mp: HashMap<&str, &str>) -> HashMap<String, KeyPressConf> {
 	mp.iter()
-		.map(|(k, v)| (k.to_string(), v.to_string()))
+		.map(|(k, v)| (k.to_string(), KeyPressConf::Key(v.to_string())))
 		.collect()
 }
 
@@ -58,8 +58,18 @@ impl KbctTestContext {
 		simple: HashMap<&str, &str>,
 		complex: HashMap<BTreeSet<&str>, HashMap<&str, &str>>,
 	) -> KbctTestContext {
-		fn name_to_codes(map: HashMap<&str, &str>) -> HashMap<i32, i32> {
-			map.into_iter().map(|(l, r)| (key(l), key(r))).collect()
+		fn name_to_codes(map: HashMap<&str, &str>) -> HashMap<i32, KeyPress> {
+			map.into_iter()
+				.map(|(l, r)| {
+					(
+						key(l),
+						KeyPress {
+							code: key(r),
+							modifiers: Default::default(),
+						},
+					)
+				})
+				.collect()
 		}
 
 		let simple_codes = name_to_codes(simple);
@@ -226,15 +236,15 @@ fn test_create_kbct_fail() -> Result<()> {
 	let kbct = Kbct::new(
 		KbctConf {
 			keyboards: vec![],
-			keymap: Some(hashmap!["C".to_string() => "D".to_string()]),
+			keymap: Some(map_string(hashmap!["C" => "D"])),
 			layers: Some(vec![
 				KbctComplexConf {
 					modifiers: vec!["A".to_string(), "B".to_string()],
-					keymap: hashmap!["1".to_string() => "2".to_string(), "2".to_string() => "1".to_string()],
+					keymap: map_string(hashmap!["1" => "2", "2" => "1"]),
 				},
 				KbctComplexConf {
 					modifiers: vec!["A".to_string()],
-					keymap: hashmap!["1".to_string() => "3".to_string()],
+					keymap: map_string(hashmap!["1" => "3"]),
 				},
 			]),
 		},
@@ -252,9 +262,9 @@ fn test_create_kbct_fail() -> Result<()> {
 
 #[test]
 fn test_create_simple_kbct() -> Result<()> {
-	let simple = hashmap! {
-		"K1".to_string() => "K2".to_string()
-	};
+	let simple = map_string(hashmap! {
+		"K1" => "K2"
+	});
 	let kbct = Kbct::new(
 		KbctConf {
 			keyboards: vec![],
@@ -268,7 +278,7 @@ fn test_create_simple_kbct() -> Result<()> {
 		}),
 	)?;
 	assert_eq!(1, kbct.simple_map.len());
-	assert_eq!(2, *kbct.simple_map.get(&1).unwrap());
+	assert_eq!(2, kbct.simple_map.get(&1).unwrap().code);
 	Ok(())
 }
 
@@ -289,7 +299,10 @@ fn test_conf_parser() -> Result<()> {
 	assert!(conf.keymap.is_some());
 	assert_eq!(None, conf.layers);
 	let map = conf.keymap.unwrap();
-	assert_eq!("VALUE", map.get("KEY").unwrap());
+	assert_eq!(
+		&KeyPressConf::Key("VALUE".to_string()),
+		map.get("KEY").unwrap()
+	);
 	assert_eq!(1, map.len());
 
 	let yml = "keyboards: []\nlayers:\n- modifiers: ['LEFT_ALT']\n  keymap:\n    KEY_I: UP_ARROW";
@@ -297,7 +310,10 @@ fn test_conf_parser() -> Result<()> {
 	assert!(conf.layers.is_some());
 	let complex_vec = conf.layers.unwrap();
 	let conf = complex_vec.get(0).unwrap();
-	assert_eq!("UP_ARROW", conf.keymap.get("KEY_I").unwrap());
+	assert_eq!(
+		&KeyPressConf::Key("UP_ARROW".to_string()),
+		conf.keymap.get("KEY_I").unwrap()
+	);
 	assert_eq!(1, conf.keymap.len());
 	assert_eq!(1, conf.modifiers.len());
 	assert_eq!("LEFT_ALT", conf.modifiers.first().unwrap());
