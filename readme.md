@@ -84,7 +84,7 @@ Description=Keyboard keycode mapping daemon supporting layered configuration
 
 [Service]
 Type=simple
-PreExec=modprobe uinput99
+ExecStartPre=modprobe uinput
 ExecStart=PATH_TO_EXECUTABLE remap --config PATH_TO_CONFIG
 Restart=always
 
