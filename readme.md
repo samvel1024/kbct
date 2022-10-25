@@ -85,7 +85,7 @@ Description=Keyboard keycode mapping daemon supporting layered configuration
 [Service]
 Type=simple
 ExecStartPre=modprobe uinput
-ExecStart=PATH_TO_EXECUTABLE remap --config PATH_TO_CONFIG
+ExecStart=/bin/sh -c "PATH_TO_EXECUTABLE remap --config PATH_TO_CONFIG"
 Restart=always
 
 [Install]
@@ -186,10 +186,10 @@ Event: time 1641154916.130391, -------------- SYN_REPORT ------------
 ```
 
 **What are the names of the keys?**
-KBCT uses the lowest possible level keycodes from the Linux kernel to perform remapping. Window managers/desktop environments may have other namings for the same keys for various reasons. To know the exact name of the key you're interested you can use either `sudo evtest /dev/input/eventXX`, or `sudo kbct log-keys --device-path /dev/input/eventXX`` where XX should be replaced by the appropriate device path. Then just type.
+KBCT uses the lowest possible level keycodes from the Linux kernel to perform remapping. Window managers/desktop environments may have other namings for the same keys for various reasons. To know the exact name of the key you're interested you can use either `sudo evtest /dev/input/eventXX`, or `sudo kbct log-keys --device-path /dev/input/eventXX` where XX should be replaced by the appropriate device path. Then just type.
 
 **It just does not work**
-Try loading uinput module (KBCT will not function but will not produce an error if the uinput module is not loaded**):
+Try loading uinput module (KBCT will not function but will not produce an error if the uinput module is not loaded):
 
 ```bash
 sudo modprobe uinput
