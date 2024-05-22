@@ -42,14 +42,23 @@ pub fn get_uinput_device_name(dev_file_path: &String) -> Result<Option<String>> 
 
 pub fn get_all_uinput_device_names_to_paths() -> Result<HashMap<String, String>> {
 	let paths = fs::read_dir("/dev/input/")?;
-	let regex: Regex = Regex::new("^.*event\\d+$")?;
+	let regex: Regex = Regex::new("^.*event(\\d+)$")?;
 	let mut ans = hashmap![];
 	for path in paths {
 		let path_buf = path?.path();
 		let device_path = path_buf.to_string_lossy();
 		if regex.is_match(&device_path) {
 			if let Some(device_name) = get_uinput_device_name(&device_path.to_string())? {
-				ans.insert(device_name, (*device_path.to_string()).to_string());
+				// If the device name already exists, append the device number to the name.  Some keyboards
+				// have multiple devices with same name.
+				if ans.contains_key(&device_name) {
+					let device_number = regex.captures(&device_path).unwrap().get(1).unwrap().as_str();
+					let dup_device_name = format!("{}-{}", device_name, device_number);
+					ans.insert(dup_device_name, (*device_path.to_string()).to_string());
+				}
+				else {
+					ans.insert(device_name, (*device_path.to_string()).to_string());
+				}
 			}
 		}
 	}
