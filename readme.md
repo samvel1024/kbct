@@ -32,9 +32,9 @@ When is KBCT useful?
 
 ### Installation
 
-There are several ways of installing KBCT
+There are several ways of installing KBCT:
 
-- Download the pre-built x86_64 AppImage binary from [releases](https://github.com/samvel1024/kbct/releases).
+- Download the pre-built x86_64 AppImage binary from [releases](https://github.com/samvel1024/kbct/releases):
 
   ```bash
   cd ~/Downloads
@@ -45,14 +45,14 @@ There are several ways of installing KBCT
   sudo ./kbct-x86_64.AppImage list-devices
   ```
 
-- Compile from the sources by first installing `libudev1` and `libudev-dev` packages (available for all known distributions).
+- Compile from the sources by first installing `libudev1` and `libudev-dev` packages (available for all known distributions):
 
   ```
   sudo apt install libudev1 && \
 	sudo apt install libudev-dev  # for ubuntu/debian
   ```
 
-  Then assuming that you have a [Rust toolchain](https://www.rust-lang.org/tools/install) installed run the following.
+  Then assuming that you have a [Rust toolchain](https://www.rust-lang.org/tools/install) installed run the following:
 
   ```bash
   cd /tmp &&
@@ -62,7 +62,7 @@ There are several ways of installing KBCT
   ./target/release/kbct --help
   ```
 
-- Install from the AUR
+- Install from the AUR:
 
   If you are an Arch Linux user, you can install it from
   [AUR](https://aur.archlinux.org/):
@@ -74,11 +74,38 @@ There are several ways of installing KBCT
   > Note: The configuration file is expected to be in
   > `/etc/kbct/config.yml`.
 
-  After the installation, run the systemd service (remember to `modprobe uinput` first):
 
-  ```
-  $ systemctl start kbct
-  ```
+### Automatic startup
+On Arch Linux, systemd service file is installed automatically. On other distributions, put this into `/etc/systemd/system/kbct.service`:
+	
+```
+[Unit]
+Description=Keyboard keycode mapping daemon supporting layered configuration
+
+[Service]
+Type=simple
+ExecStartPre=modprobe uinput
+ExecStart=/bin/sh -c "PATH_TO_EXECUTABLE remap --config PATH_TO_CONFIG"
+Restart=always
+
+[Install]
+WantedBy=default.target
+```
+
+Do not forget to replace PATH_TO_EXECUTABLE and PATH_TO_CONFIG as needed. Then run: 
+
+```bash
+$ systemctl daemon-reload
+```
+
+```bash
+$ systemctl start kbct
+```
+
+To make it run on boot automatically, run:
+```bash
+$ systemctl enable kbct
+```
 
 ### 
 
@@ -130,12 +157,6 @@ i↑ ⟶ up↑
 rightalt↑ ⟶ ∅
 ```
 
-Load uinput module (**kbct will not function but will not produce an error if the uinput module is not loaded**)
-
-```bash
-sudo modprobe uinput
-```
-
 To start KBCT based on YAML configuration file run:
 
 ```bash
@@ -155,7 +176,7 @@ To begin with, you might want to start KBCT in [debugging mode](#troubleshooting
 In order to list all the available keyboard devices and their respective names run the following:
 
 ```bash
-sudo kbct list-devices
+$ sudo kbct list-devices
 ```
 
 Most often a keyboard laptop will be named `AT Translated Set 2 keyboard`. If you're not sure what the name of your keyboard is, run `sudo evtest`, select a device from a list and try typing. If it lets you type without spitting output, you selected a wrong device. Repeat until you see output like this:
@@ -167,6 +188,15 @@ Event: time 1641154916.130391, -------------- SYN_REPORT ------------
 ```
 
 **What are the names of the keys?**
+KBCT uses the lowest possible level keycodes from the Linux kernel to perform remapping. Window managers/desktop environments may have other namings for the same keys for various reasons. To know the exact name of the key you're interested you can use either `sudo evtest /dev/input/eventXX`, or `sudo kbct log-keys --device-path /dev/input/eventXX` where XX should be replaced by the appropriate device path. Then just type.
+
+**It just does not work**
+Try loading uinput module (KBCT will not function but will not produce an error if the uinput module is not loaded):
+
+```bash
+sudo modprobe uinput
+```
+
 KBCT uses the lowest possible level keycodes from the Linux kernel to perform remapping. Window managers/desktop environments may have other namings for the same keys for various reasons. To know the exact name of the key you're interested you can use either `sudo evtest /dev/input/event<i>`, or `sudo kbct log-keys --device-path /dev/input/event<i>` where `<i>` should be replaced by the appropriate device number. You can then start typing to see the key names.
 
 **Debugging KBCT**
