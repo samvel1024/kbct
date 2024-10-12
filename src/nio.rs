@@ -3,6 +3,7 @@ use mio::event::{Event, Source};
 use mio::unix::SourceFd;
 use mio::{Events, Interest, Poll, Token};
 use std::collections::HashMap;
+use std::io;
 
 const EVENTS_CAPACITY: usize = 1024;
 
@@ -40,7 +41,16 @@ impl EventLoop {
 
 	pub(crate) fn run(&mut self) -> Result<()> {
 		while self.registrar.running {
-			self.registrar.poll.poll(&mut self.events, None)?;
+			match self.registrar.poll.poll(&mut self.events, None) {
+				Ok(_) => (),
+				Err(e) => match e.kind() {
+					std::io::ErrorKind::Interrupted => {
+						println!("Ignoring error: {}", e);
+						continue;
+					}
+					_ => return Err(kbct::KbctError::IOError(e)),
+				},
+			}
 			for ev in self.events.iter() {
 				let handler = self.registrar.handlers.get_mut(&ev.token()).unwrap();
 				match handler.on_event(ev)? {
